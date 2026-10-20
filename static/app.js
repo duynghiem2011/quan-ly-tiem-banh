@@ -1,7 +1,7 @@
 let STATE = {
   server_info: { ip: "127.0.0.1", port: 8080, url: "http://localhost:8080" },
   shop_settings: {
-    shop_name: "MỀM BAKERY",
+    shop_name: "MỀM BARKERY",
     shop_phone: "090x.xxx.xxx",
     shop_address: "Tiệm Bánh Ngọt Thủ Công • Since 2026",
     bill_footer: "Cảm ơn quý khách đã ủng hộ Mềm Bakery ❤️",
@@ -1008,10 +1008,10 @@ async function deleteOrder(orderId) {
 /* ==================== PAPER RECEIPT PRINTING ==================== */
 function buildReceiptHTML(order) {
   const shop = STATE.shop_settings || {};
-  const shopName = !shop.shop_name || shop.shop_name === "TIỆM BÁNH HOMEMADE" ? "MỀM BAKERY" : shop.shop_name;
+  const shopName = !shop.shop_name || shop.shop_name === "TIỆM BÁNH HOMEMADE" || shop.shop_name === "MỀM BAKERY" ? "MỀM BARKERY" : shop.shop_name;
   const shopPhone = shop.shop_phone || "";
   const shopAddress = !shop.shop_address || shop.shop_address === "Bếp Bánh Thủ Công - Tươi Mới Mỗi Ngày" ? "Tiệm Bánh Ngọt Thủ Công • Since 2026" : shop.shop_address;
-  const footer = !shop.bill_footer || shop.bill_footer.includes("TIỆM BÁNH HOMEMADE") ? "Cảm ơn quý khách đã ủng hộ Mềm Bakery ❤️" : shop.bill_footer;
+  const footer = !shop.bill_footer || shop.bill_footer.includes("TIỆM BÁNH HOMEMADE") ? "Cảm ơn quý khách đã ủng hộ MỀM BARKERY ❤️" : shop.bill_footer;
 
   const rowsHtml = (order.items || [])
     .map(
@@ -1029,7 +1029,7 @@ function buildReceiptHTML(order) {
 
   return `
     <div class="rcp-header">
-      <img src="/logo.jpg" alt="MỀM BAKERY" class="rcp-logo" />
+      <img src="/logo.jpg" alt="MỀM BARKERY" class="rcp-logo" />
       <div class="rcp-shop-name">${escapeHtml(shopName)}</div>
       ${shopAddress ? `<div style="font-size:12px; margin-top:2px;">${escapeHtml(shopAddress)}</div>` : ""}
       ${shopPhone ? `<div style="font-size:12px;">ĐT: ${escapeHtml(shopPhone)}</div>` : ""}
