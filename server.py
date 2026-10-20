@@ -106,11 +106,14 @@ def init_db():
         yield_unit TEXT NOT NULL DEFAULT 'bánh',
         cake_weight_gram REAL NOT NULL DEFAULT 0,
         selling_price REAL NOT NULL DEFAULT 0,
+        image_url TEXT DEFAULT '',
         notes TEXT DEFAULT '',
         updated_at TEXT NOT NULL
     )
     """)
     ensure_column(cur, "recipes", "cake_weight_gram", "REAL NOT NULL DEFAULT 0")
+    ensure_column(cur, "recipes", "image_url", "TEXT DEFAULT ''")
+    cur.execute("UPDATE recipes SET image_url = '/flan-gato.png' WHERE LOWER(name) LIKE '%flan%' AND (image_url IS NULL OR image_url = '')")
 
     cur.execute("""
     CREATE TABLE IF NOT EXISTS recipe_items (
@@ -551,6 +554,9 @@ class BakeryRequestHandler(http.server.SimpleHTTPRequestHandler):
                 yield_unit = (data.get("yield_unit") or "bánh").strip()
                 cake_weight_gram = float(data.get("cake_weight_gram") or 0)
                 selling_price = float(data.get("selling_price") or 0)  # Giá bán 1 bánh!
+                image_url = (data.get("image_url") or "").strip()
+                if not image_url and "flan" in name.lower():
+                    image_url = "/flan-gato.png"
                 notes = (data.get("notes") or "").strip()
                 items = data.get("items") or []
 
@@ -568,15 +574,15 @@ class BakeryRequestHandler(http.server.SimpleHTTPRequestHandler):
                 if recipe_id:
                     cur.execute("""
                         UPDATE recipes
-                        SET name=?, category=?, yield_qty=?, yield_unit=?, cake_weight_gram=?, selling_price=?, notes=?, updated_at=?
+                        SET name=?, category=?, yield_qty=?, yield_unit=?, cake_weight_gram=?, selling_price=?, image_url=?, notes=?, updated_at=?
                         WHERE id=?
-                    """, (name, category, yield_qty, yield_unit, cake_weight_gram, selling_price, notes, now, recipe_id))
+                    """, (name, category, yield_qty, yield_unit, cake_weight_gram, selling_price, image_url, notes, now, recipe_id))
                     cur.execute("DELETE FROM recipe_items WHERE recipe_id = ?", (recipe_id,))
                 else:
                     cur.execute("""
-                        INSERT INTO recipes (name, category, yield_qty, yield_unit, cake_weight_gram, selling_price, notes, updated_at)
-                        VALUES (?, ?, ?, ?, ?, ?, ?, ?)
-                    """, (name, category, yield_qty, yield_unit, cake_weight_gram, selling_price, notes, now))
+                        INSERT INTO recipes (name, category, yield_qty, yield_unit, cake_weight_gram, selling_price, image_url, notes, updated_at)
+                        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+                    """, (name, category, yield_qty, yield_unit, cake_weight_gram, selling_price, image_url, notes, now))
                     recipe_id = cur.lastrowid
 
                 for ing_id, amt, r_unit in valid_items:

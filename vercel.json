@@ -5,6 +5,7 @@
     { "source": "/styles.css", "destination": "/static/styles.css" },
     { "source": "/app.js", "destination": "/static/app.js" },
     { "source": "/logo.jpg", "destination": "/static/logo.jpg" },
+    { "source": "/flan-gato.png", "destination": "/static/flan-gato.png" },
     { "source": "/initial_state.json", "destination": "/static/initial_state.json" }
   ]
 }

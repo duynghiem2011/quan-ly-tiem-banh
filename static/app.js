@@ -598,13 +598,18 @@ function renderDashboard() {
           ? `<span class="stock-pill stock-ok">Đủ làm ${r.max_cakes || r.max_batches} ${escapeHtml(r.yield_unit)}</span>`
           : `<span class="stock-pill stock-out">Thiếu NL</span>`;
         const weightBadge = r.cake_weight_gram > 0 ? ` (${formatNum(r.cake_weight_gram)}g/${escapeHtml(r.yield_unit)})` : "";
+        const imgUrl = getRecipeImageUrl(r);
+        const imgHtml = imgUrl ? `<img src="${escapeHtml(imgUrl)}" alt="${escapeHtml(r.name)}" class="quick-recipe-thumb" />` : "";
         return `
         <div class="quick-recipe-item">
-          <div class="quick-recipe-info">
-            <h4>${escapeHtml(r.name)}${weightBadge}</h4>
-            <div class="quick-recipe-meta">
-              Giá bán 1 ${escapeHtml(r.yield_unit)}: <strong class="text-green">${formatVND(r.selling_price)}</strong>
-              • Giá vốn 1 ${escapeHtml(r.yield_unit)}: <strong>${formatVND(r.cost_per_cake)}</strong> • ${statusBadge}
+          <div class="pos-cake-cell">
+            ${imgHtml}
+            <div class="quick-recipe-info">
+              <h4>${escapeHtml(r.name)}${weightBadge}</h4>
+              <div class="quick-recipe-meta">
+                Giá bán 1 ${escapeHtml(r.yield_unit)}: <strong class="text-green">${formatVND(r.selling_price)}</strong>
+                • Giá vốn 1 ${escapeHtml(r.yield_unit)}: <strong>${formatVND(r.cost_per_cake)}</strong> • ${statusBadge}
+              </div>
             </div>
           </div>
           <div style="display:flex; gap:6px; align-items:center;">
@@ -625,6 +630,13 @@ function renderDashboard() {
   } else {
     recentTxContainer.innerHTML = recentTxs.map((tx) => renderTxItemHTML(tx, false)).join("");
   }
+}
+
+function getRecipeImageUrl(r) {
+  if (!r) return "";
+  if (r.image_url) return r.image_url;
+  if (String(r.name || "").toLowerCase().includes("flan")) return "/flan-gato.png";
+  return "";
 }
 
 /* ==================== 2. POS (BÁN BÁNH & IN BILL GIẤY) ==================== */
@@ -656,6 +668,8 @@ function renderPosTab() {
         const unitCost = r.cost_per_cake || r.total_cost || 0;
         const canBake = r.max_batches > 0;
         const weightInfo = r.cake_weight_gram > 0 ? ` • ${formatNum(r.cake_weight_gram)}g/${escapeHtml(r.yield_unit)}` : "";
+        const imgUrl = getRecipeImageUrl(r);
+        const imgHtml = imgUrl ? `<img src="${escapeHtml(imgUrl)}" alt="${escapeHtml(r.name)}" class="pos-cake-thumb" />` : "";
 
         return `
         <tr class="pos-item-row" data-recipe-id="${r.id}" data-name="${escapeHtml(r.name)}" data-unit="${escapeHtml(r.yield_unit)}" data-unit-cost="${unitCost}">
@@ -663,10 +677,15 @@ function renderPosTab() {
             <input type="checkbox" class="pos-check" onchange="onPosCheckChange(this)" />
           </td>
           <td onclick="toggleRowClick(event, this)" style="cursor:pointer;">
-            <strong>${escapeHtml(r.name)}</strong>
-            <div class="muted" style="font-size:12px;">
-              Đơn vị: 1 ${escapeHtml(r.yield_unit)}${weightInfo} • Giá vốn 1 ${escapeHtml(r.yield_unit)}: ${formatVND(unitCost)}
-              • ${canBake ? `<span class="text-green">Kho đủ làm ${r.max_cakes || r.max_batches} ${escapeHtml(r.yield_unit)}</span>` : `<span class="text-danger">Kho thiếu NL</span>`}
+            <div class="pos-cake-cell">
+              ${imgHtml}
+              <div>
+                <strong>${escapeHtml(r.name)}</strong>
+                <div class="muted" style="font-size:12px;">
+                  Đơn vị: 1 ${escapeHtml(r.yield_unit)}${weightInfo} • Giá vốn 1 ${escapeHtml(r.yield_unit)}: ${formatVND(unitCost)}
+                  • ${canBake ? `<span class="text-green">Kho đủ làm ${r.max_cakes || r.max_batches} ${escapeHtml(r.yield_unit)}</span>` : `<span class="text-danger">Kho thiếu NL</span>`}
+                </div>
+              </div>
             </div>
           </td>
           <td class="text-right">
@@ -1631,13 +1650,19 @@ function renderRecipes() {
         })
         .join("");
 
+      const imgUrl = getRecipeImageUrl(r);
+      const imgHtml = imgUrl ? `<img src="${escapeHtml(imgUrl)}" alt="${escapeHtml(r.name)}" class="recipe-card-img" />` : "";
+
       return `
       <div class="recipe-card">
         <div>
           <div class="recipe-top">
-            <div>
-              <div class="recipe-title">${escapeHtml(r.name)}</div>
-              <span class="recipe-cat">${escapeHtml(r.category || "Bánh ngọt")} • 1 mẻ = ${formatNum(r.yield_qty)} ${escapeHtml(r.yield_unit)}${weightText}</span>
+            <div class="recipe-title-box">
+              ${imgHtml}
+              <div>
+                <div class="recipe-title">${escapeHtml(r.name)}</div>
+                <span class="recipe-cat">${escapeHtml(r.category || "Bánh ngọt")} • 1 mẻ = ${formatNum(r.yield_qty)} ${escapeHtml(r.yield_unit)}${weightText}</span>
+              </div>
             </div>
             ${
               canBake
