@@ -917,7 +917,6 @@ async function submitPosOrder(shouldPrint = true) {
   const payment_method = document.getElementById("pos-payment-method").value;
   const discount = parseFloat(document.getElementById("pos-discount").value) || 0;
   const shipping_fee = parseFloat(document.getElementById("pos-shipping").value) || 0;
-  const deduct_stock = document.getElementById("pos-deduct-stock").checked;
 
   try {
     const res = await apiPost("/api/orders/create", {
@@ -927,7 +926,7 @@ async function submitPosOrder(shouldPrint = true) {
       payment_method,
       discount,
       shipping_fee,
-      deduct_stock,
+      deduct_stock: false,
       items
     });
 
@@ -974,7 +973,6 @@ function renderOrdersHistory() {
         </td>
         <td style="font-size:13px;">
           ${itemsSummary}
-          ${o.deducted_stock ? `<span class="stock-pill stock-ok" style="font-size:11px; margin-top:4px;">Đã trừ kho NL</span>` : ""}
         </td>
         <td class="text-right"><strong>${formatVND(o.total_amount)}</strong></td>
         <td class="text-right"><strong class="text-green">+${formatVND(profit)}</strong></td>
@@ -993,12 +991,12 @@ function renderOrdersHistory() {
 async function deleteOrder(orderId) {
   const o = (STATE.orders || []).find((x) => x.id === orderId);
   if (!o) return;
-  if (!confirm(`Bạn có chắc muốn huỷ hóa đơn ${o.bill_code} của khách "${o.customer_name}"? (Nếu đơn có trừ kho nguyên liệu thì phần mềm sẽ tự hoàn lại kho).`)) {
+  if (!confirm(`Bạn có chắc muốn huỷ hóa đơn ${o.bill_code} của khách "${o.customer_name}"?`)) {
     return;
   }
   try {
     await apiPost("/api/orders/delete", { id: orderId });
-    showToast("🗑️ Đã huỷ đơn hàng và hoàn lại kho!");
+    showToast("🗑️ Đã huỷ đơn hàng!");
     await loadState();
   } catch (err) {
     showToast(err.message, true);
