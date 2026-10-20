@@ -44,7 +44,7 @@
         </button>
         <button class="nav-item" data-tab="history" onclick="switchTab('history')">
           <span class="nav-icon">🕒</span>
-          <span class="nav-text">Lịch sử kho</span>
+          <span class="nav-text">Lịch sử & Nhật ký</span>
         </button>
       </nav>
 
@@ -421,17 +421,82 @@
         <div id="recipes-grid" class="recipes-grid"></div>
       </section>
 
-      <!-- TAB 6: TRANSACTION HISTORY -->
+      <!-- TAB 6: TRANSACTION HISTORY & PERSONAL ACTIVITY LOG -->
       <section id="tab-history" class="tab-panel">
         <div class="page-header">
           <div>
-            <h1>🕒 Lịch sử nhập kho & Trừ nguyên liệu</h1>
-            <p class="subtitle">Mọi lần mua thêm nguyên liệu, làm bánh hoặc bán bánh đều được ghi rõ số Gram và số Kg đã trừ.</p>
+            <h1>🕒 Lịch sử kho & Nhật ký thao tác cá nhân</h1>
+            <p class="subtitle">Quản lý lịch sử biến động kho (có thể tích chọn xoá tuỳ ý) và theo dõi toàn bộ lịch sử thao tác cá nhân khi sử dụng trang web</p>
+          </div>
+          <div class="header-actions">
+            <div class="filter-pills">
+              <button class="pill active" data-hview="all" onclick="setHistoryViewMode('all')">📋 Xem cả hai</button>
+              <button class="pill" data-hview="warehouse" onclick="setHistoryViewMode('warehouse')">📦 Lịch sử kho</button>
+              <button class="pill" data-hview="activity" onclick="setHistoryViewMode('activity')">👤 Lịch sử thao tác cá nhân</button>
+            </div>
           </div>
         </div>
 
-        <div class="card">
+        <!-- SECTION 1: WAREHOUSE HISTORY -->
+        <div id="warehouse-history-section" class="card mb-24">
+          <div class="card-header history-card-header">
+            <div>
+              <h2>📦 Lịch sử nhập kho & Trừ nguyên liệu (<span id="tx-total-count">0</span>)</h2>
+              <p class="muted" style="font-size: 13px; margin-top: 2px;">
+                💡 <strong>Xoá lịch sử</strong> chỉ xoá dòng ghi chú khỏi danh sách (giữ nguyên số tồn kho). Nếu muốn cộng/trừ lại nguyên liệu vào kho, hãy bấm <strong>↩️ Hoàn tác kho</strong>.
+              </p>
+            </div>
+            <div class="history-bulk-bar">
+              <label class="checkbox-label history-select-all">
+                <input type="checkbox" id="tx-select-all-cb" onchange="toggleSelectAllTransactions(this.checked)" />
+                <span>Chọn tất cả</span>
+              </label>
+              <button id="btn-delete-selected-tx" class="btn btn-sm btn-danger" onclick="deleteSelectedTransactions()" disabled>
+                🗑️ Xoá mục đã chọn (<span id="tx-selected-count">0</span>)
+              </button>
+              <button class="btn btn-sm btn-outline text-red" onclick="deleteAllTransactions()">
+                🧹 Xoá toàn bộ lịch sử kho
+              </button>
+            </div>
+          </div>
+
           <div id="history-list" class="history-list"></div>
+        </div>
+
+        <!-- SECTION 2: PERSONAL ACTIVITY LOG -->
+        <div id="personal-activity-section" class="card">
+          <div class="card-header history-card-header">
+            <div>
+              <h2>👤 Lịch sử thao tác cá nhân khi sử dụng trang web (<span id="act-total-count">0</span>)</h2>
+              <p class="muted" style="font-size: 13px; margin-top: 2px;">
+                Ghi nhận tự động mọi thao tác của bạn trên web: thêm/sửa/xoá nguyên liệu, làm bánh, tạo đơn & in bill, xuất file, xoá lịch sử...
+              </p>
+            </div>
+            <div class="history-bulk-bar">
+              <select id="act-type-filter" class="form-control" style="width: auto; min-width: 170px; padding: 6px 10px; font-size: 13px;" onchange="renderActivityLogs()">
+                <option value="">🔍 Tất cả loại thao tác</option>
+                <option value="ORDER">🧾 Bán bánh & In Bill</option>
+                <option value="BAKE">🧁 Làm bánh (Trừ kho)</option>
+                <option value="RESTOCK">📥 Nhập kho nguyên liệu</option>
+                <option value="INGREDIENT">🥚 Thêm / Sửa / Xoá nguyên liệu</option>
+                <option value="RECIPE">📖 Công thức bánh</option>
+                <option value="HISTORY">🗑️ Xoá / Hoàn tác lịch sử</option>
+                <option value="SETTINGS">⚙️ Cài đặt & Xuất file</option>
+              </select>
+              <label class="checkbox-label history-select-all">
+                <input type="checkbox" id="act-select-all-cb" onchange="toggleSelectAllActivities(this.checked)" />
+                <span>Chọn tất cả</span>
+              </label>
+              <button id="btn-delete-selected-act" class="btn btn-sm btn-danger" onclick="deleteSelectedActivities()" disabled>
+                🗑️ Xoá mục đã chọn (<span id="act-selected-count">0</span>)
+              </button>
+              <button class="btn btn-sm btn-outline text-red" onclick="deleteAllActivities()">
+                🧹 Xoá tất cả nhật ký
+              </button>
+            </div>
+          </div>
+
+          <div id="activity-log-list" class="history-list"></div>
         </div>
       </section>
     </main>

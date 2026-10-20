@@ -691,6 +691,109 @@ body {
   border-radius: 6px;
 }
 
+.history-card-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  flex-wrap: wrap;
+  gap: 14px;
+  padding-bottom: 14px;
+  margin-bottom: 14px;
+  border-bottom: 1px dashed var(--border);
+}
+
+.history-bulk-bar {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.history-select-all {
+  background: var(--surface-alt);
+  border: 1px solid var(--border);
+  padding: 6px 12px;
+  border-radius: 8px;
+  font-size: 13px;
+  user-select: none;
+}
+
+.history-select-all input[type="checkbox"],
+.tx-check-input {
+  width: 17px;
+  height: 17px;
+  accent-color: var(--primary);
+  cursor: pointer;
+}
+
+.tx-item.selected {
+  border-color: var(--primary);
+  background: #edf5ff;
+}
+
+.tx-item-left {
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+  flex: 1;
+}
+
+.tx-check-wrap {
+  padding-top: 2px;
+  display: flex;
+  align-items: center;
+}
+
+.tx-actions {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+}
+
+.btn-danger {
+  background: var(--danger);
+  color: #fff;
+  border: 1px solid var(--danger);
+}
+
+.btn-danger:hover:not(:disabled) {
+  background: #b91c1c;
+}
+
+.btn-danger:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+
+.tx-badge.ORDER {
+  background: #e0f2fe;
+  color: #0369a1;
+}
+
+.tx-badge.INGREDIENT {
+  background: #f3e8ff;
+  color: #6b21a8;
+}
+
+.tx-badge.RECIPE {
+  background: #fce7f3;
+  color: #9d174d;
+}
+
+.tx-badge.HISTORY,
+.tx-badge.UNDO {
+  background: var(--danger-bg);
+  color: var(--danger);
+}
+
+.tx-badge.SETTINGS,
+.tx-badge.SYSTEM {
+  background: #e2e8f0;
+  color: #334155;
+}
+
 /* BAKE PAGE */
 .bake-container {
   display: grid;

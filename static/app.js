@@ -10,11 +10,15 @@ let STATE = {
   ingredients: [],
   recipes: [],
   orders: [],
-  transactions: []
+  transactions: [],
+  activity_logs: []
 };
 
 let currentIngFilter = "all";
 let currentPreviewOrder = null;
+let selectedTxIds = new Set();
+let selectedActIds = new Set();
+let currentHistoryViewMode = "all";
 
 const METRIC_FACTORS = {
   mg: 0.001,
@@ -107,7 +111,29 @@ function nowStr() {
   return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())} ${pad(d.getHours())}:${pad(d.getMinutes())}:${pad(d.getSeconds())}`;
 }
 
+function pushLocalActivity(st, action_type, description, now) {
+  st.activity_logs = st.activity_logs || [];
+  const nextId = st.activity_logs.reduce((m, x) => Math.max(m, Number(x.id) || 0), 0) + 1;
+  st.activity_logs.unshift({
+    id: nextId,
+    action_type,
+    description,
+    created_at: now || nowStr()
+  });
+}
+
 function recomputeRecipesInState(st) {
+  st.transactions = st.transactions || [];
+  st.activity_logs = st.activity_logs || [];
+  if (st.activity_logs.length === 0) {
+    st.activity_logs.push({
+      id: 1,
+      action_type: "SYSTEM",
+      description: "Khởi tạo nhật ký thao tác cá nhân trên hệ thống MỀM BARKERY",
+      created_at: nowStr()
+    });
+  }
+
   const ingMap = {};
   (st.ingredients || []).forEach((i) => (ingMap[i.id] = i));
 
@@ -230,23 +256,39 @@ async function handleVercelLocalPost(path, data) {
     if (data.id) {
       const ing = st.ingredients.find((x) => x.id === Number(data.id));
       if (!ing) throw new Error("Không tìm thấy nguyên liệu.");
+      const oldStock = Number(ing.stock) || 0;
+      const newStock = Number(data.stock) || 0;
+      const diff = Number((newStock - oldStock).toFixed(4));
       ing.name = name;
       ing.category = data.category || "Bột các loại";
       ing.unit = data.unit || "kg";
-      ing.stock = Number(data.stock) || 0;
+      ing.stock = newStock;
       ing.min_stock = Number(data.min_stock) || 0;
       ing.package_size = pkgSize;
       ing.package_price = pkgPrice;
       ing.cost_per_unit = costPerUnit;
       ing.updated_at = now;
+      if (Math.abs(diff) > 0.0001) {
+        const sign = diff > 0 ? "+" : "";
+        st.transactions.unshift({
+          id: Date.now(),
+          type: "ADJUST",
+          title: `Điều chỉnh tồn kho: ${name}`,
+          total_cost: 0,
+          created_at: now,
+          details: [{ ingredient_id: ing.id, name, change: `${sign}${diff}`, raw_delta: diff, unit: ing.unit }]
+        });
+      }
+      pushLocalActivity(st, "INGREDIENT", `Cập nhật nguyên liệu: ${name} (Tồn: ${newStock} ${ing.unit}, Giá vốn: ${Math.round(costPerUnit).toLocaleString("vi-VN")}đ/${ing.unit})`, now);
     } else {
       const newId = st.ingredients.reduce((m, x) => Math.max(m, x.id || 0), 0) + 1;
       const stock = Number(data.stock) || 0;
+      const unit = data.unit || "kg";
       st.ingredients.push({
         id: newId,
         name,
         category: data.category || "Bột các loại",
-        unit: data.unit || "kg",
+        unit,
         stock,
         min_stock: Number(data.min_stock) || 0,
         package_size: pkgSize,
@@ -260,8 +302,9 @@ async function handleVercelLocalPost(path, data) {
         title: `Thêm nguyên liệu mới: ${name}`,
         total_cost: Math.round(stock * costPerUnit),
         created_at: now,
-        details: [{ ingredient_id: newId, name, change: `+${stock}`, raw_delta: stock, unit: data.unit || "kg" }]
+        details: [{ ingredient_id: newId, name, change: `+${stock}`, raw_delta: stock, unit }]
       });
+      pushLocalActivity(st, "INGREDIENT", `Thêm nguyên liệu mới: ${name} (${stock} ${unit})`, now);
     }
     saveLocalVercelState(st);
     return { ok: true };
@@ -281,20 +324,25 @@ async function handleVercelLocalPost(path, data) {
     }
     ing.stock = Number((ing.stock + addedInStock).toFixed(4));
     ing.updated_at = now;
+    const title = `Nhập kho: ${ing.name} (+${addQty}${addUnit})`;
     st.transactions.unshift({
       id: Date.now(),
       type: "RESTOCK",
-      title: `Nhập kho: ${ing.name} (+${addQty}${addUnit})`,
+      title,
       total_cost: Math.round(totalPrice),
       created_at: now,
       details: [{ ingredient_id: ing.id, name: ing.name, change: `+${addQty}${addUnit}`, raw_delta: addedInStock, unit: "" }]
     });
+    pushLocalActivity(st, "RESTOCK", title, now);
     saveLocalVercelState(st);
     return { ok: true };
   }
 
   if (path === "/api/ingredients/delete") {
+    const ing = st.ingredients.find((x) => x.id === Number(data.id));
+    const ingName = ing ? ing.name : `ID #${data.id}`;
     st.ingredients = st.ingredients.filter((x) => x.id !== Number(data.id));
+    pushLocalActivity(st, "INGREDIENT", `Xoá nguyên liệu khỏi kho: ${ingName}`, now);
     saveLocalVercelState(st);
     return { ok: true };
   }
@@ -308,6 +356,8 @@ async function handleVercelLocalPost(path, data) {
       amount: Number(it.amount),
       recipe_unit: it.recipe_unit || "g"
     }));
+    const yieldUnit = data.yield_unit || "bánh";
+    const sellingPrice = Number(data.selling_price) || 0;
     if (data.id) {
       const r = st.recipes.find((x) => x.id === Number(data.id));
       if (r) {
@@ -315,14 +365,15 @@ async function handleVercelLocalPost(path, data) {
           name,
           category: data.category,
           yield_qty: Number(data.yield_qty) || 1,
-          yield_unit: data.yield_unit || "bánh",
+          yield_unit: yieldUnit,
           cake_weight_gram: Number(data.cake_weight_gram) || 0,
-          selling_price: Number(data.selling_price) || 0,
+          selling_price: sellingPrice,
           notes: data.notes || "",
           items,
           updated_at: now
         });
       }
+      pushLocalActivity(st, "RECIPE", `Cập nhật công thức bánh: ${name} (Giá bán: ${Math.round(sellingPrice).toLocaleString("vi-VN")}đ/${yieldUnit})`, now);
     } else {
       const newId = st.recipes.reduce((m, x) => Math.max(m, x.id || 0), 0) + 1;
       st.recipes.push({
@@ -330,20 +381,24 @@ async function handleVercelLocalPost(path, data) {
         name,
         category: data.category,
         yield_qty: Number(data.yield_qty) || 1,
-        yield_unit: data.yield_unit || "bánh",
+        yield_unit: yieldUnit,
         cake_weight_gram: Number(data.cake_weight_gram) || 0,
-        selling_price: Number(data.selling_price) || 0,
+        selling_price: sellingPrice,
         notes: data.notes || "",
         items,
         updated_at: now
       });
+      pushLocalActivity(st, "RECIPE", `Tạo công thức bánh mới: ${name} (Giá bán: ${Math.round(sellingPrice).toLocaleString("vi-VN")}đ/${yieldUnit})`, now);
     }
     saveLocalVercelState(st);
     return { ok: true };
   }
 
   if (path === "/api/recipes/delete") {
+    const r = st.recipes.find((x) => x.id === Number(data.id));
+    const recName = r ? r.name : `ID #${data.id}`;
     st.recipes = st.recipes.filter((x) => x.id !== Number(data.id));
+    pushLocalActivity(st, "RECIPE", `Xoá công thức bánh: ${recName}`, now);
     saveLocalVercelState(st);
     return { ok: true };
   }
@@ -377,6 +432,7 @@ async function handleVercelLocalPost(path, data) {
 
     const title = `Làm bánh: ${r.name} (${batches * r.yield_qty} ${r.yield_unit})`;
     st.transactions.unshift({ id: Date.now(), type: "BAKE", title, total_cost: Math.round(totalCost), created_at: now, details });
+    pushLocalActivity(st, "BAKE", `${title} — Đã tự động trừ nguyên liệu trong kho`, now);
     saveLocalVercelState(st);
     return { ok: true, title };
   }
@@ -429,9 +485,11 @@ async function handleVercelLocalPost(path, data) {
       });
     }
 
+    const total_amount = Math.max(0, subtotal - (Number(data.discount) || 0) + (Number(data.shipping_fee) || 0));
+    const bill_code = `HD-${String((st.orders?.length || 0) + 1).padStart(3, "0")}`;
     const order = {
       id: Date.now() + 1,
-      bill_code: `HD-${String((st.orders?.length || 0) + 1).padStart(3, "0")}`,
+      bill_code,
       customer_name,
       customer_phone: data.customer_phone || "",
       customer_note: data.customer_note || "",
@@ -440,7 +498,7 @@ async function handleVercelLocalPost(path, data) {
       subtotal,
       discount: Number(data.discount) || 0,
       shipping_fee: Number(data.shipping_fee) || 0,
-      total_amount: Math.max(0, subtotal - (Number(data.discount) || 0) + (Number(data.shipping_fee) || 0)),
+      total_amount,
       total_cost: Math.round(totalCost),
       deducted_stock: data.deduct_stock ? 1 : 0,
       tx_id: data.deduct_stock ? txId : null,
@@ -448,18 +506,25 @@ async function handleVercelLocalPost(path, data) {
     };
     st.orders = st.orders || [];
     st.orders.unshift(order);
+    const summaryNames = items.map((it) => `${it.qty} ${it.name}`).join(", ");
+    pushLocalActivity(st, "ORDER", `Tạo đơn bán bánh ${bill_code} (${customer_name}): ${summaryNames} — Tổng: ${Math.round(total_amount).toLocaleString("vi-VN")}đ`, now);
     saveLocalVercelState(st);
     return { ok: true, order };
   }
 
   if (path === "/api/orders/delete") {
+    const ord = (st.orders || []).find((x) => x.id === Number(data.id));
     st.orders = (st.orders || []).filter((x) => x.id !== Number(data.id));
+    if (ord) {
+      pushLocalActivity(st, "ORDER", `Xoá đơn hàng ${ord.bill_code} (${ord.customer_name})`, now);
+    }
     saveLocalVercelState(st);
     return { ok: true };
   }
 
   if (path === "/api/settings/save") {
     st.shop_settings = Object.assign(st.shop_settings || {}, data);
+    pushLocalActivity(st, "SETTINGS", `Cập nhật thông tin cửa hàng trên bill: ${st.shop_settings.shop_name || "MỀM BARKERY"}`, now);
     saveLocalVercelState(st);
     return { ok: true };
   }
@@ -475,11 +540,54 @@ async function handleVercelLocalPost(path, data) {
       });
     }
     st.transactions = st.transactions.filter((x) => x.id !== Number(data.id));
+    if (tx) {
+      pushLocalActivity(st, "UNDO", `Hoàn tác giao dịch kho (đã cộng/trừ lại tồn kho): ${tx.title}`, now);
+    }
+    saveLocalVercelState(st);
+    return { ok: true };
+  }
+
+  if (path === "/api/transactions/delete") {
+    if (data.all) {
+      const cnt = (st.transactions || []).length;
+      st.transactions = [];
+      pushLocalActivity(st, "HISTORY", `Xoá toàn bộ lịch sử biến động kho (${cnt} mục)`, now);
+    } else {
+      const idSet = new Set((data.ids || []).map((x) => Number(x)));
+      st.transactions = (st.transactions || []).filter((x) => !idSet.has(Number(x.id)));
+      pushLocalActivity(st, "HISTORY", `Xoá tuỳ chọn ${idSet.size} mục trong lịch sử biến động kho`, now);
+    }
+    saveLocalVercelState(st);
+    return { ok: true };
+  }
+
+  if (path === "/api/activity/log") {
+    if (data.description) {
+      pushLocalActivity(st, data.action_type || "ACTION", data.description, now);
+      saveLocalVercelState(st);
+    }
+    return { ok: true };
+  }
+
+  if (path === "/api/activity/delete") {
+    if (data.all) {
+      st.activity_logs = [];
+    } else {
+      const idSet = new Set((data.ids || []).map((x) => Number(x)));
+      st.activity_logs = (st.activity_logs || []).filter((x) => !idSet.has(Number(x.id)));
+    }
     saveLocalVercelState(st);
     return { ok: true };
   }
 
   return { ok: true };
+}
+
+async function logClientActivity(action_type, description) {
+  try {
+    await apiPost("/api/activity/log", { action_type, description });
+    await loadState();
+  } catch (e) {}
 }
 
 async function loadState() {
@@ -513,6 +621,7 @@ function renderAll(preserveBakeRecipeId) {
   renderRecipes();
   renderBakeTab(preserveBakeRecipeId);
   renderHistory();
+  renderActivityLogs();
 }
 
 function populateCategoryFilterDropdown() {
@@ -1120,6 +1229,12 @@ function changePreviewPaperSize(size) {
 }
 
 function triggerBrowserPrint() {
+  if (currentPreviewOrder) {
+    logClientActivity(
+      "ORDER",
+      `In bill giấy đơn hàng ${currentPreviewOrder.bill_code} (${currentPreviewOrder.customer_name || "Khách lẻ"})`
+    );
+  }
   window.print();
 }
 
@@ -1903,10 +2018,25 @@ async function deleteRecipe(id) {
   }
 }
 
-/* ==================== 6. HISTORY TAB ==================== */
-function renderTxItemHTML(tx, allowUndo = true) {
+/* ==================== 6. HISTORY & PERSONAL ACTIVITY LOG TAB ==================== */
+function setHistoryViewMode(mode) {
+  currentHistoryViewMode = mode || "all";
+  document.querySelectorAll("#tab-history .filter-pills .pill").forEach((btn) => {
+    btn.classList.toggle("active", btn.dataset.hview === currentHistoryViewMode);
+  });
+  const whSec = document.getElementById("warehouse-history-section");
+  const actSec = document.getElementById("personal-activity-section");
+  if (whSec) {
+    whSec.classList.toggle("hidden", currentHistoryViewMode === "activity");
+  }
+  if (actSec) {
+    actSec.classList.toggle("hidden", currentHistoryViewMode === "warehouse");
+  }
+}
+
+function renderTxItemHTML(tx, allowActions = true) {
   const typeLabels = {
-    BAKE: "🧁 Làm/Bán bánh (Trừ kho)",
+    BAKE: "🧁 Làm bánh (Trừ kho)",
     RESTOCK: "📥 Mua vào (Nhập kho)",
     ADJUST: "⚖️ Kiểm kê / Điều chỉnh"
   };
@@ -1918,19 +2048,33 @@ function renderTxItemHTML(tx, allowUndo = true) {
     )
     .join("");
 
+  const isSelected = allowActions && selectedTxIds.has(Number(tx.id));
+
   return `
-    <div class="tx-item">
-      <div>
+    <div class="tx-item ${isSelected ? "selected" : ""}" id="tx-row-${tx.id}">
+      <div class="tx-item-left">
+        ${
+          allowActions
+            ? `<div class="tx-check-wrap">
+                 <input type="checkbox" class="tx-check-input tx-row-cb" data-id="${tx.id}" ${isSelected ? "checked" : ""} onchange="toggleSelectTransaction(${tx.id}, this.checked)" title="Chọn mục này để xoá" />
+               </div>`
+            : ""
+        }
         <div>
-          <span class="tx-badge ${tx.type}">${label}</span>
-          <span class="tx-title">${escapeHtml(tx.title)}</span>
+          <div>
+            <span class="tx-badge ${tx.type}">${label}</span>
+            <span class="tx-title">${escapeHtml(tx.title)}</span>
+          </div>
+          <div class="tx-time">🕒 ${escapeHtml(tx.created_at)} ${tx.total_cost > 0 ? `• Giá vốn: <strong>${formatVND(tx.total_cost)}</strong>` : ""}</div>
+          <div class="tx-pills">${pills}</div>
         </div>
-        <div class="tx-time">🕒 ${escapeHtml(tx.created_at)} ${tx.total_cost > 0 ? `• Giá vốn: <strong>${formatVND(tx.total_cost)}</strong>` : ""}</div>
-        <div class="tx-pills">${pills}</div>
       </div>
       ${
-        allowUndo
-          ? `<button class="btn btn-sm btn-outline" onclick="undoTransaction(${tx.id})" title="Hoàn lại số lượng nguyên liệu của giao dịch này">↩️ Hoàn tác</button>`
+        allowActions
+          ? `<div class="tx-actions">
+               <button class="btn btn-sm btn-outline" onclick="undoTransaction(${tx.id})" title="Khôi phục lại số lượng nguyên liệu vào kho và xoá giao dịch này">↩️ Hoàn tác kho</button>
+               <button class="btn btn-sm btn-danger-ghost" onclick="deleteSingleTransaction(${tx.id})" title="Chỉ xoá dòng lịch sử này (Không thay đổi số lượng tồn kho)">🗑️ Xoá</button>
+             </div>`
           : ""
       }
     </div>
@@ -1939,20 +2083,291 @@ function renderTxItemHTML(tx, allowUndo = true) {
 
 function renderHistory() {
   const container = document.getElementById("history-list");
-  if (STATE.transactions.length === 0) {
-    container.innerHTML = `<p class="muted">Chưa có lịch sử giao dịch nào.</p>`;
+  if (!container) return;
+
+  const txs = STATE.transactions || [];
+  const validIds = new Set(txs.map((t) => Number(t.id)));
+  selectedTxIds.forEach((id) => {
+    if (!validIds.has(id)) selectedTxIds.delete(id);
+  });
+
+  const totalCountEl = document.getElementById("tx-total-count");
+  if (totalCountEl) totalCountEl.textContent = txs.length;
+
+  if (txs.length === 0) {
+    container.innerHTML = `<p class="muted" style="padding: 12px 0;">Chưa có lịch sử biến động kho nào.</p>`;
   } else {
-    container.innerHTML = STATE.transactions.map((tx) => renderTxItemHTML(tx, true)).join("");
+    container.innerHTML = txs.map((tx) => renderTxItemHTML(tx, true)).join("");
+  }
+
+  updateTxSelectionUI();
+}
+
+function toggleSelectTransaction(id, checked) {
+  const numId = Number(id);
+  if (checked) {
+    selectedTxIds.add(numId);
+  } else {
+    selectedTxIds.delete(numId);
+  }
+  const row = document.getElementById(`tx-row-${numId}`);
+  if (row) row.classList.toggle("selected", checked);
+  updateTxSelectionUI();
+}
+
+function toggleSelectAllTransactions(checked) {
+  const txs = STATE.transactions || [];
+  if (checked) {
+    txs.forEach((tx) => selectedTxIds.add(Number(tx.id)));
+  } else {
+    selectedTxIds.clear();
+  }
+  document.querySelectorAll("#history-list .tx-row-cb").forEach((cb) => {
+    cb.checked = checked;
+    const row = cb.closest(".tx-item");
+    if (row) row.classList.toggle("selected", checked);
+  });
+  updateTxSelectionUI();
+}
+
+function updateTxSelectionUI() {
+  const txs = STATE.transactions || [];
+  const count = selectedTxIds.size;
+  const countEl = document.getElementById("tx-selected-count");
+  if (countEl) countEl.textContent = count;
+
+  const delBtn = document.getElementById("btn-delete-selected-tx");
+  if (delBtn) delBtn.disabled = count === 0;
+
+  const selectAllCb = document.getElementById("tx-select-all-cb");
+  if (selectAllCb) {
+    selectAllCb.checked = txs.length > 0 && count === txs.length;
+    selectAllCb.indeterminate = count > 0 && count < txs.length;
+  }
+}
+
+async function deleteSingleTransaction(id) {
+  if (!confirm("Bạn muốn xoá dòng lịch sử kho này?\n(Lưu ý: Số lượng nguyên liệu tồn kho hiện tại sẽ được giữ nguyên, không bị thay đổi)")) {
+    return;
+  }
+  try {
+    await apiPost("/api/transactions/delete", { ids: [Number(id)] });
+    selectedTxIds.delete(Number(id));
+    showToast("🗑️ Đã xoá mục lịch sử kho!");
+    await loadState();
+  } catch (err) {
+    showToast(err.message, true);
+  }
+}
+
+async function deleteSelectedTransactions() {
+  const ids = Array.from(selectedTxIds);
+  if (ids.length === 0) {
+    return showToast("Vui lòng tích chọn ít nhất 1 lịch sử kho để xoá.", true);
+  }
+  if (!confirm(`Bạn có chắc muốn xoá ${ids.length} mục lịch sử kho đã chọn?\n(Số lượng nguyên liệu tồn kho hiện tại vẫn giữ nguyên)`)) {
+    return;
+  }
+  try {
+    await apiPost("/api/transactions/delete", { ids });
+    selectedTxIds.clear();
+    showToast(`🗑️ Đã xoá ${ids.length} mục lịch sử kho đã chọn!`);
+    await loadState();
+  } catch (err) {
+    showToast(err.message, true);
+  }
+}
+
+async function deleteAllTransactions() {
+  const total = (STATE.transactions || []).length;
+  if (total === 0) {
+    return showToast("Lịch sử kho hiện đang trống.", true);
+  }
+  if (!confirm(`Bạn có chắc chắn muốn XOÁ TOÀN BỘ (${total} mục) lịch sử biến động kho không?\n(Số lượng nguyên liệu tồn kho hiện tại sẽ giữ nguyên)`)) {
+    return;
+  }
+  try {
+    await apiPost("/api/transactions/delete", { all: true });
+    selectedTxIds.clear();
+    showToast("🧹 Đã xoá toàn bộ lịch sử kho!");
+    await loadState();
+  } catch (err) {
+    showToast(err.message, true);
   }
 }
 
 async function undoTransaction(id) {
-  if (!confirm("Bạn có muốn hoàn tác giao dịch này? Số lượng nguyên liệu trong kho sẽ được khôi phục lại như trước.")) {
+  if (!confirm("Bạn có muốn hoàn tác giao dịch này? Số lượng nguyên liệu trong kho sẽ được cộng/trừ khôi phục lại như trước.")) {
     return;
   }
   try {
     await apiPost("/api/transactions/undo", { id });
+    selectedTxIds.delete(Number(id));
     showToast("↩️ Đã hoàn tác và khôi phục số lượng tồn kho!");
+    await loadState();
+  } catch (err) {
+    showToast(err.message, true);
+  }
+}
+
+/* ==================== PERSONAL ACTIVITY LOGS ==================== */
+function getFilteredActivityLogs() {
+  const allLogs = STATE.activity_logs || [];
+  const filterType = document.getElementById("act-type-filter")?.value || "";
+  if (!filterType) return allLogs;
+  if (filterType === "HISTORY") {
+    return allLogs.filter((x) => x.action_type === "HISTORY" || x.action_type === "UNDO");
+  }
+  if (filterType === "SETTINGS") {
+    return allLogs.filter((x) => x.action_type === "SETTINGS" || x.action_type === "SYSTEM" || x.action_type === "ACTION");
+  }
+  return allLogs.filter((x) => x.action_type === filterType);
+}
+
+function renderActivityLogs() {
+  const container = document.getElementById("activity-log-list");
+  if (!container) return;
+
+  const allLogs = STATE.activity_logs || [];
+  const validIds = new Set(allLogs.map((a) => Number(a.id)));
+  selectedActIds.forEach((id) => {
+    if (!validIds.has(id)) selectedActIds.delete(id);
+  });
+
+  const logs = getFilteredActivityLogs();
+  const totalCountEl = document.getElementById("act-total-count");
+  if (totalCountEl) totalCountEl.textContent = logs.length;
+
+  const actionLabels = {
+    ORDER: "🧾 Bán bánh & In Bill",
+    BAKE: "🧁 Làm bánh (Trừ kho)",
+    RESTOCK: "📥 Nhập kho nguyên liệu",
+    INGREDIENT: "🥚 Kho nguyên liệu",
+    RECIPE: "📖 Công thức bánh",
+    HISTORY: "🗑️ Xoá lịch sử",
+    UNDO: "↩️ Hoàn tác kho",
+    SETTINGS: "⚙️ Cài đặt & Tiện ích",
+    SYSTEM: "✨ Hệ thống"
+  };
+
+  if (logs.length === 0) {
+    container.innerHTML = `<p class="muted" style="padding: 12px 0;">Chưa có lịch sử thao tác cá nhân nào trong mục này.</p>`;
+  } else {
+    container.innerHTML = logs
+      .map((act) => {
+        const isSelected = selectedActIds.has(Number(act.id));
+        const badgeLabel = actionLabels[act.action_type] || "👤 Thao tác cá nhân";
+        return `
+        <div class="tx-item ${isSelected ? "selected" : ""}" id="act-row-${act.id}">
+          <div class="tx-item-left">
+            <div class="tx-check-wrap">
+              <input type="checkbox" class="tx-check-input act-row-cb" data-id="${act.id}" ${isSelected ? "checked" : ""} onchange="toggleSelectActivity(${act.id}, this.checked)" title="Chọn thao tác này để xoá" />
+            </div>
+            <div>
+              <div>
+                <span class="tx-badge ${escapeHtml(act.action_type || "SYSTEM")}">${badgeLabel}</span>
+                <span class="tx-title">${escapeHtml(act.description)}</span>
+              </div>
+              <div class="tx-time">🕒 Thực hiện lúc: ${escapeHtml(act.created_at)}</div>
+            </div>
+          </div>
+          <div class="tx-actions">
+            <button class="btn btn-sm btn-danger-ghost" onclick="deleteSingleActivity(${act.id})" title="Xoá dòng nhật ký thao tác này">🗑️ Xoá</button>
+          </div>
+        </div>
+      `;
+      })
+      .join("");
+  }
+
+  updateActSelectionUI();
+}
+
+function toggleSelectActivity(id, checked) {
+  const numId = Number(id);
+  if (checked) {
+    selectedActIds.add(numId);
+  } else {
+    selectedActIds.delete(numId);
+  }
+  const row = document.getElementById(`act-row-${numId}`);
+  if (row) row.classList.toggle("selected", checked);
+  updateActSelectionUI();
+}
+
+function toggleSelectAllActivities(checked) {
+  const visibleLogs = getFilteredActivityLogs();
+  if (checked) {
+    visibleLogs.forEach((act) => selectedActIds.add(Number(act.id)));
+  } else {
+    visibleLogs.forEach((act) => selectedActIds.delete(Number(act.id)));
+  }
+  document.querySelectorAll("#activity-log-list .act-row-cb").forEach((cb) => {
+    cb.checked = checked;
+    const row = cb.closest(".tx-item");
+    if (row) row.classList.toggle("selected", checked);
+  });
+  updateActSelectionUI();
+}
+
+function updateActSelectionUI() {
+  const visibleLogs = getFilteredActivityLogs();
+  const count = selectedActIds.size;
+  const countEl = document.getElementById("act-selected-count");
+  if (countEl) countEl.textContent = count;
+
+  const delBtn = document.getElementById("btn-delete-selected-act");
+  if (delBtn) delBtn.disabled = count === 0;
+
+  const selectAllCb = document.getElementById("act-select-all-cb");
+  if (selectAllCb) {
+    const visibleSelectedCount = visibleLogs.filter((x) => selectedActIds.has(Number(x.id))).length;
+    selectAllCb.checked = visibleLogs.length > 0 && visibleSelectedCount === visibleLogs.length;
+    selectAllCb.indeterminate = visibleSelectedCount > 0 && visibleSelectedCount < visibleLogs.length;
+  }
+}
+
+async function deleteSingleActivity(id) {
+  try {
+    await apiPost("/api/activity/delete", { ids: [Number(id)] });
+    selectedActIds.delete(Number(id));
+    showToast("🗑️ Đã xoá dòng nhật ký thao tác!");
+    await loadState();
+  } catch (err) {
+    showToast(err.message, true);
+  }
+}
+
+async function deleteSelectedActivities() {
+  const ids = Array.from(selectedActIds);
+  if (ids.length === 0) {
+    return showToast("Vui lòng tích chọn ít nhất 1 thao tác để xoá.", true);
+  }
+  if (!confirm(`Bạn muốn xoá ${ids.length} mục lịch sử thao tác cá nhân đã chọn?`)) {
+    return;
+  }
+  try {
+    await apiPost("/api/activity/delete", { ids });
+    selectedActIds.clear();
+    showToast(`🗑️ Đã xoá ${ids.length} nhật ký thao tác đã chọn!`);
+    await loadState();
+  } catch (err) {
+    showToast(err.message, true);
+  }
+}
+
+async function deleteAllActivities() {
+  const total = (STATE.activity_logs || []).length;
+  if (total === 0) {
+    return showToast("Nhật ký thao tác cá nhân hiện đang trống.", true);
+  }
+  if (!confirm(`Bạn có chắc muốn XOÁ TOÀN BỘ (${total} mục) lịch sử thao tác cá nhân không?`)) {
+    return;
+  }
+  try {
+    await apiPost("/api/activity/delete", { all: true });
+    selectedActIds.clear();
+    showToast("🧹 Đã xoá toàn bộ nhật ký thao tác cá nhân!");
     await loadState();
   } catch (err) {
     showToast(err.message, true);
@@ -1996,6 +2411,7 @@ function exportIngredientsCSV() {
   link.href = URL.createObjectURL(blob);
   link.download = `kho-nguyen-lieu-banh-${new Date().toISOString().slice(0, 10)}.csv`;
   link.click();
+  logClientActivity("SETTINGS", `Xuất file Excel (CSV) danh sách kho nguyên liệu (${STATE.ingredients.length} loại)`);
 }
 
 function exportOrdersCSV() {
@@ -2022,6 +2438,7 @@ function exportOrdersCSV() {
   link.href = URL.createObjectURL(blob);
   link.download = `doanh-thu-ban-banh-${new Date().toISOString().slice(0, 10)}.csv`;
   link.click();
+  logClientActivity("SETTINGS", `Xuất file Excel (CSV) báo cáo doanh thu bán bánh (${(STATE.orders || []).length} đơn)`);
 }
 
 function escapeHtml(str) {

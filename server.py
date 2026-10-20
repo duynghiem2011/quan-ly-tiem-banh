@@ -78,6 +78,13 @@ def ensure_column(cur, table, col_name, col_def):
         cur.execute(f"ALTER TABLE {table} ADD COLUMN {col_name} {col_def}")
 
 
+def log_activity(cur, action_type, description, now):
+    cur.execute("""
+        INSERT INTO activity_logs (action_type, description, created_at)
+        VALUES (?, ?, ?)
+    """, (action_type, description, now))
+
+
 def init_db():
     conn = get_db()
     cur = conn.cursor()
@@ -140,6 +147,15 @@ def init_db():
     """)
 
     cur.execute("""
+    CREATE TABLE IF NOT EXISTS activity_logs (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        action_type TEXT NOT NULL,
+        description TEXT NOT NULL,
+        created_at TEXT NOT NULL
+    )
+    """)
+
+    cur.execute("""
     CREATE TABLE IF NOT EXISTS orders (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
         bill_code TEXT NOT NULL,
@@ -162,7 +178,7 @@ def init_db():
     cur.execute("""
     CREATE TABLE IF NOT EXISTS shop_settings (
         id INTEGER PRIMARY KEY CHECK (id = 1),
-        shop_name TEXT DEFAULT 'TIỆM BÁNH HOMEMADE',
+        shop_name TEXT DEFAULT 'MỀM BARKERY',
         shop_phone TEXT DEFAULT '090x.xxx.xxx',
         shop_address TEXT DEFAULT 'Bếp Bánh Thủ Công - Tươi Mới Mỗi Ngày',
         bill_footer TEXT DEFAULT 'Cảm ơn quý khách đã ủng hộ! Hẹn gặp lại ❤️',
@@ -174,8 +190,13 @@ def init_db():
     if cur.fetchone()["cnt"] == 0:
         cur.execute("""
             INSERT INTO shop_settings (id, shop_name, shop_phone, shop_address, bill_footer, paper_size)
-            VALUES (1, 'TIỆM BÁNH HOMEMADE', '090x.xxx.xxx', 'Bếp Bánh Thủ Công - Tươi Mới Mỗi Ngày', 'Cảm ơn quý khách đã ủng hộ! Hẹn gặp lại ❤️', 'k80')
+            VALUES (1, 'MỀM BARKERY', '090x.xxx.xxx', 'Bếp Bánh Thủ Công - Tươi Mới Mỗi Ngày', 'Cảm ơn quý khách đã ủng hộ! Hẹn gặp lại ❤️', 'k80')
         """)
+
+    cur.execute("SELECT COUNT(*) as cnt FROM activity_logs")
+    if cur.fetchone()["cnt"] == 0:
+        now_init = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+        log_activity(cur, "SYSTEM", "Khởi tạo nhật ký thao tác cá nhân trên hệ thống MỀM BARKERY", now_init)
 
     # Ensure existing recipe_items have proper recipe_unit
     cur.execute("""
@@ -337,6 +358,9 @@ class BakeryRequestHandler(http.server.SimpleHTTPRequestHandler):
                 except Exception:
                     tx["details"] = []
 
+            cur.execute("SELECT * FROM activity_logs ORDER BY id DESC LIMIT 200")
+            activity_rows = [dict(r) for r in cur.fetchall()]
+
             cur.execute("SELECT * FROM orders ORDER BY id DESC LIMIT 200")
             order_rows = [dict(r) for r in cur.fetchall()]
             for o in order_rows:
@@ -362,7 +386,8 @@ class BakeryRequestHandler(http.server.SimpleHTTPRequestHandler):
                 "ingredients": ingredients,
                 "recipes": recipes,
                 "orders": order_rows,
-                "transactions": tx_rows
+                "transactions": tx_rows,
+                "activity_logs": activity_rows
             })
             return
 
@@ -429,6 +454,7 @@ class BakeryRequestHandler(http.server.SimpleHTTPRequestHandler):
                             0,
                             now
                         ))
+                    log_activity(cur, "INGREDIENT", f"Cập nhật nguyên liệu: {name} (Tồn: {stock:g} {unit}, Giá vốn: {round(cost_per_unit):,}đ/{unit})", now)
                 else:
                     cur.execute("""
                         INSERT INTO ingredients (name, category, unit, stock, min_stock, cost_per_unit, package_size, package_price, updated_at)
@@ -452,6 +478,7 @@ class BakeryRequestHandler(http.server.SimpleHTTPRequestHandler):
                         round(stock * cost_per_unit),
                         now
                     ))
+                    log_activity(cur, "INGREDIENT", f"Thêm nguyên liệu mới: {name} ({stock:g} {unit})", now)
                 conn.commit()
                 return self.send_json({"ok": True})
 
@@ -528,6 +555,7 @@ class BakeryRequestHandler(http.server.SimpleHTTPRequestHandler):
                     round(total_purchase_price),
                     now
                 ))
+                log_activity(cur, "RESTOCK", title, now)
                 conn.commit()
                 return self.send_json({"ok": True})
 
@@ -539,7 +567,11 @@ class BakeryRequestHandler(http.server.SimpleHTTPRequestHandler):
                     return self.send_json({
                         "error": "Nguyên liệu này đang nằm trong công thức bánh. Vui lòng gỡ khỏi công thức bánh trước khi xóa."
                     }, 400)
+                cur.execute("SELECT name FROM ingredients WHERE id = ?", (ing_id,))
+                ing_row = cur.fetchone()
+                ing_name = ing_row["name"] if ing_row else f"ID #{ing_id}"
                 cur.execute("DELETE FROM ingredients WHERE id = ?", (ing_id,))
+                log_activity(cur, "INGREDIENT", f"Xoá nguyên liệu khỏi kho: {ing_name}", now)
                 conn.commit()
                 return self.send_json({"ok": True})
 
@@ -571,6 +603,7 @@ class BakeryRequestHandler(http.server.SimpleHTTPRequestHandler):
                 if not valid_items:
                     return self.send_json({"error": "Công thức cần có ít nhất 1 nguyên liệu với định lượng lớn hơn 0."}, 400)
 
+                is_update = bool(recipe_id)
                 if recipe_id:
                     cur.execute("""
                         UPDATE recipes
@@ -591,14 +624,20 @@ class BakeryRequestHandler(http.server.SimpleHTTPRequestHandler):
                         VALUES (?, ?, ?, ?)
                     """, (recipe_id, ing_id, amt, r_unit))
 
+                action_verb = "Cập nhật công thức bánh" if is_update else "Tạo công thức bánh mới"
+                log_activity(cur, "RECIPE", f"{action_verb}: {name} (Giá bán: {round(selling_price):,}đ/{yield_unit})", now)
                 conn.commit()
                 return self.send_json({"ok": True, "recipe_id": recipe_id})
 
             # 5. Delete Recipe
             if path == "/api/recipes/delete":
                 recipe_id = int(data.get("id"))
+                cur.execute("SELECT name FROM recipes WHERE id = ?", (recipe_id,))
+                rec_row = cur.fetchone()
+                rec_name = rec_row["name"] if rec_row else f"ID #{recipe_id}"
                 cur.execute("DELETE FROM recipe_items WHERE recipe_id = ?", (recipe_id,))
                 cur.execute("DELETE FROM recipes WHERE id = ?", (recipe_id,))
+                log_activity(cur, "RECIPE", f"Xoá công thức bánh: {rec_name}", now)
                 conn.commit()
                 return self.send_json({"ok": True})
 
@@ -691,6 +730,7 @@ class BakeryRequestHandler(http.server.SimpleHTTPRequestHandler):
                     round(total_cost),
                     now
                 ))
+                log_activity(cur, "BAKE", f"{title} — Đã tự động trừ nguyên liệu trong kho", now)
 
                 conn.commit()
                 return self.send_json({"ok": True, "title": title})
@@ -703,7 +743,7 @@ class BakeryRequestHandler(http.server.SimpleHTTPRequestHandler):
                 payment_method = (data.get("payment_method") or "Tiền mặt").strip()
                 discount = float(data.get("discount") or 0)
                 shipping_fee = float(data.get("shipping_fee") or 0)
-                deduct_stock = bool(data.get("deduct_stock", True))
+                deduct_stock = bool(data.get("deduct_stock", False))
                 raw_items = data.get("items") or []
 
                 if not raw_items:
@@ -848,6 +888,9 @@ class BakeryRequestHandler(http.server.SimpleHTTPRequestHandler):
                 created_order = dict(cur.fetchone())
                 created_order["items"] = order_items
 
+                summary_names = ", ".join(f"{it['qty']:g} {it['name']}" for it in order_items)
+                log_activity(cur, "ORDER", f"Tạo đơn bán bánh {bill_code} ({customer_name}): {summary_names} — Tổng: {round(total_amount):,}đ", now)
+
                 conn.commit()
                 return self.send_json({"ok": True, "order": created_order})
 
@@ -875,13 +918,16 @@ class BakeryRequestHandler(http.server.SimpleHTTPRequestHandler):
                                 """, (float(raw_delta), now, int(ing_id)))
                         cur.execute("DELETE FROM transactions WHERE id = ?", (order["tx_id"],))
 
+                bill_code = order["bill_code"]
+                cust_name = order["customer_name"]
                 cur.execute("DELETE FROM orders WHERE id = ?", (order_id,))
+                log_activity(cur, "ORDER", f"Xoá đơn hàng {bill_code} ({cust_name})", now)
                 conn.commit()
                 return self.send_json({"ok": True})
 
             # 9. Save Shop Settings for Bill Printing
             if path == "/api/settings/save":
-                shop_name = (data.get("shop_name") or "TIỆM BÁNH HOMEMADE").strip()
+                shop_name = (data.get("shop_name") or "MỀM BARKERY").strip()
                 shop_phone = (data.get("shop_phone") or "").strip()
                 shop_address = (data.get("shop_address") or "").strip()
                 bill_footer = (data.get("bill_footer") or "").strip()
@@ -892,10 +938,11 @@ class BakeryRequestHandler(http.server.SimpleHTTPRequestHandler):
                     SET shop_name=?, shop_phone=?, shop_address=?, bill_footer=?, paper_size=?
                     WHERE id = 1
                 """, (shop_name, shop_phone, shop_address, bill_footer, paper_size))
+                log_activity(cur, "SETTINGS", f"Cập nhật thông tin cửa hàng trên bill: {shop_name}", now)
                 conn.commit()
                 return self.send_json({"ok": True})
 
-            # 10. Undo Transaction
+            # 10. Undo Transaction (Reverts stock + removes transaction)
             if path == "/api/transactions/undo":
                 tx_id = int(data.get("id") or 0)
                 cur.execute("SELECT * FROM transactions WHERE id = ?", (tx_id,))
@@ -914,7 +961,52 @@ class BakeryRequestHandler(http.server.SimpleHTTPRequestHandler):
                             WHERE id = ?
                         """, (float(raw_delta), now, int(ing_id)))
 
+                tx_title = tx["title"]
                 cur.execute("DELETE FROM transactions WHERE id = ?", (tx_id,))
+                log_activity(cur, "UNDO", f"Hoàn tác giao dịch kho (đã cộng/trừ lại tồn kho): {tx_title}", now)
+                conn.commit()
+                return self.send_json({"ok": True})
+
+            # 11. Delete Warehouse History (Selective or All - without reverting stock)
+            if path == "/api/transactions/delete":
+                delete_all = bool(data.get("all", False))
+                ids = data.get("ids") or []
+                if delete_all:
+                    cur.execute("SELECT COUNT(*) as cnt FROM transactions")
+                    cnt = cur.fetchone()["cnt"]
+                    cur.execute("DELETE FROM transactions")
+                    log_activity(cur, "HISTORY", f"Xoá toàn bộ lịch sử biến động kho ({cnt} mục)", now)
+                else:
+                    clean_ids = [int(x) for x in ids if str(x).isdigit() or isinstance(x, int)]
+                    if not clean_ids:
+                        return self.send_json({"error": "Vui lòng chọn ít nhất 1 lịch sử kho để xoá."}, 400)
+                    placeholders = ",".join("?" for _ in clean_ids)
+                    cur.execute(f"DELETE FROM transactions WHERE id IN ({placeholders})", clean_ids)
+                    log_activity(cur, "HISTORY", f"Xoá tuỳ chọn {len(clean_ids)} mục trong lịch sử biến động kho", now)
+                conn.commit()
+                return self.send_json({"ok": True})
+
+            # 12. Record Custom Personal Activity Log from Frontend
+            if path == "/api/activity/log":
+                action_type = (data.get("action_type") or "ACTION").strip()
+                description = (data.get("description") or "").strip()
+                if description:
+                    log_activity(cur, action_type, description, now)
+                    conn.commit()
+                return self.send_json({"ok": True})
+
+            # 13. Delete Personal Activity Logs (Selective or All)
+            if path == "/api/activity/delete":
+                delete_all = bool(data.get("all", False))
+                ids = data.get("ids") or []
+                if delete_all:
+                    cur.execute("DELETE FROM activity_logs")
+                else:
+                    clean_ids = [int(x) for x in ids if str(x).isdigit() or isinstance(x, int)]
+                    if not clean_ids:
+                        return self.send_json({"error": "Vui lòng chọn ít nhất 1 nhật ký thao tác để xoá."}, 400)
+                    placeholders = ",".join("?" for _ in clean_ids)
+                    cur.execute(f"DELETE FROM activity_logs WHERE id IN ({placeholders})", clean_ids)
                 conn.commit()
                 return self.send_json({"ok": True})
 
