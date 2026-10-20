@@ -120,6 +120,7 @@ def init_db():
     """)
     ensure_column(cur, "recipes", "cake_weight_gram", "REAL NOT NULL DEFAULT 0")
     ensure_column(cur, "recipes", "image_url", "TEXT DEFAULT ''")
+    ensure_column(cur, "recipes", "baked_stock", "REAL NOT NULL DEFAULT 0")
     cur.execute("UPDATE recipes SET image_url = '/flan-gato.png' WHERE LOWER(name) LIKE '%flan%' AND (image_url IS NULL OR image_url = '')")
 
     cur.execute("""
@@ -142,9 +143,13 @@ def init_db():
         title TEXT NOT NULL,
         details_json TEXT NOT NULL,
         total_cost REAL DEFAULT 0,
+        recipe_id INTEGER DEFAULT NULL,
+        baked_qty REAL DEFAULT 0,
         created_at TEXT NOT NULL
     )
     """)
+    ensure_column(cur, "transactions", "recipe_id", "INTEGER DEFAULT NULL")
+    ensure_column(cur, "transactions", "baked_qty", "REAL DEFAULT 0")
 
     cur.execute("""
     CREATE TABLE IF NOT EXISTS activity_logs (
@@ -296,6 +301,24 @@ class BakeryRequestHandler(http.server.SimpleHTTPRequestHandler):
             cur.execute("SELECT * FROM recipes ORDER BY name ASC")
             recipes = [dict(r) for r in cur.fetchall()]
 
+            cur.execute("SELECT * FROM transactions ORDER BY id DESC LIMIT 100")
+            tx_rows = [dict(r) for r in cur.fetchall()]
+            for tx in tx_rows:
+                try:
+                    tx["details"] = json.loads(tx["details_json"])
+                except Exception:
+                    tx["details"] = []
+
+            cur.execute("SELECT * FROM orders ORDER BY id DESC LIMIT 200")
+            order_rows = [dict(r) for r in cur.fetchall()]
+            for o in order_rows:
+                try:
+                    o["items"] = json.loads(o["items_json"])
+                except Exception:
+                    o["items"] = []
+
+            today_prefix = datetime.now().strftime("%Y-%m-%d")
+
             for r in recipes:
                 cur.execute("""
                     SELECT ri.id, ri.ingredient_id, ri.amount, ri.recipe_unit,
@@ -340,6 +363,30 @@ class BakeryRequestHandler(http.server.SimpleHTTPRequestHandler):
                                 "missing_in_recipe_unit": round(it["amount"] - it["stock_in_recipe_unit"], 2),
                             })
 
+                # Calculate baked_today & sold_today for this recipe
+                baked_today = 0.0
+                for tx in tx_rows:
+                    if tx.get("type") == "BAKE" and str(tx.get("created_at") or "").startswith(today_prefix):
+                        title_str = str(tx.get("title") or "")
+                        if title_str.startswith("Bán bánh"):
+                            continue
+                        if tx.get("recipe_id") == r["id"] and (tx.get("baked_qty") or 0) > 0:
+                            baked_today += float(tx["baked_qty"])
+                        elif not tx.get("recipe_id") and r["name"].lower() in title_str.lower():
+                            import re
+                            m = re.search(r"\(([\d\.]+)\s+", title_str)
+                            if m:
+                                baked_today += float(m.group(1))
+                            else:
+                                baked_today += float(r.get("yield_qty") or 1)
+
+                sold_today = 0.0
+                for o in order_rows:
+                    if str(o.get("created_at") or "").startswith(today_prefix):
+                        for o_it in (o.get("items") or []):
+                            if o_it.get("recipe_id") == r["id"]:
+                                sold_today += float(o_it.get("qty") or 0)
+
                 r["items"] = items
                 r["total_cost"] = round(total_batch_cost, 2)  # Giá vốn cả 1 mẻ
                 yield_qty = float(r.get("yield_qty") or 1)
@@ -349,25 +396,15 @@ class BakeryRequestHandler(http.server.SimpleHTTPRequestHandler):
                 r["max_batches"] = max_batches if max_batches is not None else 0
                 r["max_cakes"] = int((max_batches or 0) * yield_qty)
                 r["shortages"] = shortages
-
-            cur.execute("SELECT * FROM transactions ORDER BY id DESC LIMIT 100")
-            tx_rows = [dict(r) for r in cur.fetchall()]
-            for tx in tx_rows:
-                try:
-                    tx["details"] = json.loads(tx["details_json"])
-                except Exception:
-                    tx["details"] = []
+                r["baked_today"] = round(baked_today, 2)
+                r["sold_today"] = round(sold_today, 2)
+                calc_remaining = max(0.0, round(baked_today - sold_today, 2))
+                db_baked_stock = round(float(r.get("baked_stock") or 0), 2)
+                r["baked_stock"] = calc_remaining if baked_today > 0 else db_baked_stock
+                r["remaining_today"] = r["baked_stock"]
 
             cur.execute("SELECT * FROM activity_logs ORDER BY id DESC LIMIT 200")
             activity_rows = [dict(r) for r in cur.fetchall()]
-
-            cur.execute("SELECT * FROM orders ORDER BY id DESC LIMIT 200")
-            order_rows = [dict(r) for r in cur.fetchall()]
-            for o in order_rows:
-                try:
-                    o["items"] = json.loads(o["items_json"])
-                except Exception:
-                    o["items"] = []
 
             cur.execute("SELECT * FROM shop_settings WHERE id = 1")
             shop_row = cur.fetchone()
@@ -721,16 +758,24 @@ class BakeryRequestHandler(http.server.SimpleHTTPRequestHandler):
                     title += f" - {note}"
 
                 cur.execute("""
-                    INSERT INTO transactions (type, title, details_json, total_cost, created_at)
-                    VALUES (?, ?, ?, ?, ?)
+                    UPDATE recipes
+                    SET baked_stock = ROUND(COALESCE(baked_stock, 0) + ?, 2), updated_at = ?
+                    WHERE id = ?
+                """, (total_yield, now, recipe_id))
+
+                cur.execute("""
+                    INSERT INTO transactions (type, title, details_json, total_cost, recipe_id, baked_qty, created_at)
+                    VALUES (?, ?, ?, ?, ?, ?, ?)
                 """, (
                     "BAKE",
                     title,
                     json.dumps(tx_details, ensure_ascii=False),
                     round(total_cost),
+                    recipe_id,
+                    total_yield,
                     now
                 ))
-                log_activity(cur, "BAKE", f"{title} — Đã tự động trừ nguyên liệu trong kho", now)
+                log_activity(cur, "BAKE", f"{title} — Đã cộng +{total_yield:g} bánh vào quầy bán & trừ nguyên liệu kho", now)
 
                 conn.commit()
                 return self.send_json({"ok": True, "title": title})
@@ -747,7 +792,7 @@ class BakeryRequestHandler(http.server.SimpleHTTPRequestHandler):
                 raw_items = data.get("items") or []
 
                 if not raw_items:
-                    return self.send_json({"error": "Vui lòng tích chọn ít nhất 1 loại bánh trong đơn hàng."}, 400)
+                    return self.send_json({"error": "Vui lòng bấm chọn ít nhất 1 loại bánh trong đơn hàng."}, 400)
 
                 order_items = []
                 subtotal = 0.0
@@ -800,6 +845,13 @@ class BakeryRequestHandler(http.server.SimpleHTTPRequestHandler):
                                     ing_deductions[iid]["recipe_needed"] += ri["amount"] * batches_needed
 
                             unit_cost = rec_batch_cost / yield_qty if yield_qty > 0 else rec_batch_cost
+
+                            # Deduct from baked_stock (số bánh đã nấu hiện còn trong ngày)
+                            cur.execute("""
+                                UPDATE recipes
+                                SET baked_stock = MAX(0, ROUND(COALESCE(baked_stock, 0) - ?, 2))
+                                WHERE id = ?
+                            """, (qty, int(recipe_id)))
 
                     line_total = round(qty * unit_price)
                     line_cost = round(qty * unit_cost)
@@ -902,6 +954,21 @@ class BakeryRequestHandler(http.server.SimpleHTTPRequestHandler):
                 if not order:
                     return self.send_json({"error": "Không tìm thấy đơn hàng."}, 404)
 
+                # Restore baked_stock for cancelled order items
+                try:
+                    ord_items = json.loads(order["items_json"])
+                    for o_it in ord_items:
+                        r_id = o_it.get("recipe_id")
+                        q = float(o_it.get("qty") or 0)
+                        if r_id and q > 0:
+                            cur.execute("""
+                                UPDATE recipes
+                                SET baked_stock = ROUND(COALESCE(baked_stock, 0) + ?, 2)
+                                WHERE id = ?
+                            """, (q, int(r_id)))
+                except Exception:
+                    pass
+
                 if order["tx_id"]:
                     cur.execute("SELECT * FROM transactions WHERE id = ?", (order["tx_id"],))
                     tx = cur.fetchone()
@@ -960,6 +1027,13 @@ class BakeryRequestHandler(http.server.SimpleHTTPRequestHandler):
                             SET stock = ROUND(stock - ?, 4), updated_at = ?
                             WHERE id = ?
                         """, (float(raw_delta), now, int(ing_id)))
+
+                if tx["type"] == "BAKE" and tx["recipe_id"] and (tx["baked_qty"] or 0) > 0:
+                    cur.execute("""
+                        UPDATE recipes
+                        SET baked_stock = MAX(0, ROUND(COALESCE(baked_stock, 0) - ?, 2))
+                        WHERE id = ?
+                    """, (float(tx["baked_qty"]), int(tx["recipe_id"])))
 
                 tx_title = tx["title"]
                 cur.execute("DELETE FROM transactions WHERE id = ?", (tx_id,))

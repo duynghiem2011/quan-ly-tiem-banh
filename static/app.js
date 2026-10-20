@@ -124,6 +124,7 @@ function pushLocalActivity(st, action_type, description, now) {
 
 function recomputeRecipesInState(st) {
   st.transactions = st.transactions || [];
+  st.orders = st.orders || [];
   st.activity_logs = st.activity_logs || [];
   if (st.activity_logs.length === 0) {
     st.activity_logs.push({
@@ -134,6 +135,7 @@ function recomputeRecipesInState(st) {
     });
   }
 
+  const todayPrefix = nowStr().slice(0, 10);
   const ingMap = {};
   (st.ingredients || []).forEach((i) => (ingMap[i.id] = i));
 
@@ -169,12 +171,43 @@ function recomputeRecipesInState(st) {
       }
     });
 
+    let bakedToday = 0;
+    (st.transactions || []).forEach((tx) => {
+      if (tx.type === "BAKE" && String(tx.created_at || "").startsWith(todayPrefix)) {
+        const titleStr = String(tx.title || "");
+        if (titleStr.startsWith("Bán bánh")) return;
+        if (Number(tx.recipe_id) === Number(r.id) && Number(tx.baked_qty) > 0) {
+          bakedToday += Number(tx.baked_qty);
+        } else if (!tx.recipe_id && titleStr.toLowerCase().includes(String(r.name || "").toLowerCase())) {
+          const m = titleStr.match(/\(([\d\.]+)\s+/);
+          bakedToday += m ? parseFloat(m[1]) : Number(r.yield_qty) || 1;
+        }
+      }
+    });
+
+    let soldToday = 0;
+    (st.orders || []).forEach((o) => {
+      if (String(o.created_at || "").startsWith(todayPrefix)) {
+        (o.items || []).forEach((oit) => {
+          if (Number(oit.recipe_id) === Number(r.id)) {
+            soldToday += Number(oit.qty) || 0;
+          }
+        });
+      }
+    });
+
     r.total_cost = Math.round(totalBatchCost * 100) / 100;
     const yieldQty = Number(r.yield_qty) || 1;
     r.cost_per_cake = yieldQty > 0 ? Math.round((totalBatchCost / yieldQty) * 100) / 100 : r.total_cost;
     r.max_batches = maxBatches !== null ? maxBatches : 0;
     r.max_cakes = Math.floor(r.max_batches * yieldQty);
     r.shortages = shortages;
+    r.baked_today = Number(bakedToday.toFixed(2));
+    r.sold_today = Number(soldToday.toFixed(2));
+    const calcRem = Math.max(0, Number((bakedToday - soldToday).toFixed(2)));
+    const dbStock = Number(r.baked_stock) || 0;
+    r.baked_stock = bakedToday > 0 ? calcRem : dbStock;
+    r.remaining_today = r.baked_stock;
   });
 
   if (st.server_info) {
@@ -384,6 +417,7 @@ async function handleVercelLocalPost(path, data) {
         yield_unit: yieldUnit,
         cake_weight_gram: Number(data.cake_weight_gram) || 0,
         selling_price: sellingPrice,
+        baked_stock: 0,
         notes: data.notes || "",
         items,
         updated_at: now
@@ -430,9 +464,20 @@ async function handleVercelLocalPost(path, data) {
       });
     });
 
-    const title = `Làm bánh: ${r.name} (${batches * r.yield_qty} ${r.yield_unit})`;
-    st.transactions.unshift({ id: Date.now(), type: "BAKE", title, total_cost: Math.round(totalCost), created_at: now, details });
-    pushLocalActivity(st, "BAKE", `${title} — Đã tự động trừ nguyên liệu trong kho`, now);
+    const totalYield = Number((batches * (Number(r.yield_qty) || 1)).toFixed(2));
+    r.baked_stock = Number(((Number(r.baked_stock) || 0) + totalYield).toFixed(2));
+    const title = `Làm bánh: ${r.name} (${totalYield} ${r.yield_unit})`;
+    st.transactions.unshift({
+      id: Date.now(),
+      type: "BAKE",
+      title,
+      total_cost: Math.round(totalCost),
+      recipe_id: r.id,
+      baked_qty: totalYield,
+      created_at: now,
+      details
+    });
+    pushLocalActivity(st, "BAKE", `${title} — Đã cộng +${totalYield} bánh vào quầy bán & trừ nguyên liệu kho`, now);
     saveLocalVercelState(st);
     return { ok: true, title };
   }
@@ -447,6 +492,12 @@ async function handleVercelLocalPost(path, data) {
     items.forEach((it) => {
       subtotal += it.line_total || 0;
       totalCost += (it.qty || 0) * (it.unit_cost || 0);
+      if (it.recipe_id) {
+        const r = st.recipes.find((x) => x.id === Number(it.recipe_id));
+        if (r) {
+          r.baked_stock = Math.max(0, Number(((Number(r.baked_stock) || 0) - (Number(it.qty) || 0)).toFixed(2)));
+        }
+      }
       if (data.deduct_stock && it.recipe_id) {
         const r = st.recipes.find((x) => x.id === Number(it.recipe_id));
         if (r) {
@@ -514,6 +565,16 @@ async function handleVercelLocalPost(path, data) {
 
   if (path === "/api/orders/delete") {
     const ord = (st.orders || []).find((x) => x.id === Number(data.id));
+    if (ord && ord.items) {
+      ord.items.forEach((oit) => {
+        if (oit.recipe_id) {
+          const r = st.recipes.find((x) => x.id === Number(oit.recipe_id));
+          if (r) {
+            r.baked_stock = Number(((Number(r.baked_stock) || 0) + (Number(oit.qty) || 0)).toFixed(2));
+          }
+        }
+      });
+    }
     st.orders = (st.orders || []).filter((x) => x.id !== Number(data.id));
     if (ord) {
       pushLocalActivity(st, "ORDER", `Xoá đơn hàng ${ord.bill_code} (${ord.customer_name})`, now);
@@ -538,6 +599,12 @@ async function handleVercelLocalPost(path, data) {
           ing.stock = Number((ing.stock - Number(d.raw_delta)).toFixed(4));
         }
       });
+    }
+    if (tx && tx.type === "BAKE" && tx.recipe_id && Number(tx.baked_qty) > 0) {
+      const r = st.recipes.find((x) => x.id === Number(tx.recipe_id));
+      if (r) {
+        r.baked_stock = Math.max(0, Number(((Number(r.baked_stock) || 0) - Number(tx.baked_qty)).toFixed(2)));
+      }
     }
     st.transactions = st.transactions.filter((x) => x.id !== Number(data.id));
     if (tx) {
@@ -768,31 +835,35 @@ function renderPosTab() {
   }
 
   if (STATE.recipes.length === 0) {
-    tbody.innerHTML = `<tr><td colspan="5" class="text-center muted" style="padding:24px;">Chưa có bánh nào trong danh sách. Hãy tạo bánh ở mục "Công thức & Giá vốn" hoặc bấm "+ Thêm món phụ".</td></tr>`;
+    tbody.innerHTML = `<tr><td colspan="4" class="text-center muted" style="padding:24px;">Chưa có bánh nào trong danh sách. Hãy tạo bánh ở mục "Công thức & Giá vốn" hoặc bấm "+ Thêm món phụ".</td></tr>`;
   } else {
     tbody.innerHTML = STATE.recipes
       .map((r) => {
-        // selling_price is already the price of 1 cake!
         const unitPrice = r.selling_price > 0 ? Math.round(r.selling_price) : Math.round((r.cost_per_cake || r.total_cost) * 2);
         const unitCost = r.cost_per_cake || r.total_cost || 0;
-        const canBake = r.max_batches > 0;
-        const weightInfo = r.cake_weight_gram > 0 ? ` • ${formatNum(r.cake_weight_gram)}g/${escapeHtml(r.yield_unit)}` : "";
         const imgUrl = getRecipeImageUrl(r);
         const imgHtml = imgUrl ? `<img src="${escapeHtml(imgUrl)}" alt="${escapeHtml(r.name)}" class="pos-cake-thumb" />` : "";
 
+        const bakedToday = Number(r.baked_today) || 0;
+        const soldToday = Number(r.sold_today) || 0;
+        const remaining = Number(r.remaining_today ?? r.baked_stock) || 0;
+        const pillClass = remaining > 0 ? "has-cake" : "no-cake";
+
         return `
-        <tr class="pos-item-row" data-recipe-id="${r.id}" data-name="${escapeHtml(r.name)}" data-unit="${escapeHtml(r.yield_unit)}" data-unit-cost="${unitCost}">
-          <td class="text-center">
-            <input type="checkbox" class="pos-check" onchange="onPosCheckChange(this)" />
-          </td>
-          <td onclick="toggleRowClick(event, this)" style="cursor:pointer;">
+        <tr class="pos-item-row" onclick="togglePosRow(event, this)" data-recipe-id="${r.id}" data-name="${escapeHtml(r.name)}" data-unit="${escapeHtml(r.yield_unit)}" data-unit-cost="${unitCost}">
+          <td>
             <div class="pos-cake-cell">
               ${imgHtml}
               <div>
-                <strong>${escapeHtml(r.name)}</strong>
-                <div class="muted" style="font-size:12px;">
-                  Đơn vị: 1 ${escapeHtml(r.yield_unit)}${weightInfo} • Giá vốn 1 ${escapeHtml(r.yield_unit)}: ${formatVND(unitCost)}
-                  • ${canBake ? `<span class="text-green">Kho đủ làm ${r.max_cakes || r.max_batches} ${escapeHtml(r.yield_unit)}</span>` : `<span class="text-danger">Kho thiếu NL</span>`}
+                <div>
+                  <strong>${escapeHtml(r.name)}</strong>
+                  <span class="pos-selected-tag">✓ Đã chọn</span>
+                </div>
+                <div class="pos-baked-status">
+                  <span class="pos-baked-pill ${pillClass}">
+                    🧁 Đã làm hôm nay: <strong>${formatNum(bakedToday)}</strong> • Còn lại: <strong>${formatNum(remaining)}</strong> bánh
+                  </span>
+                  ${soldToday > 0 ? `<span class="muted" style="font-size:11.5px;">(Đã bán: ${formatNum(soldToday)})</span>` : ""}
                 </div>
               </div>
             </div>
@@ -802,9 +873,9 @@ function renderPosTab() {
           </td>
           <td class="text-center">
             <div class="pos-qty-box">
-              <button type="button" class="pos-qty-btn" onclick="stepPosQty(this, -1)">−</button>
+              <button type="button" class="pos-qty-btn" onclick="stepPosQty(event, this, -1)">−</button>
               <input type="number" class="pos-qty-input" value="1" min="0.5" step="1" oninput="onPosQtyInput(this)" />
-              <button type="button" class="pos-qty-btn" onclick="stepPosQty(this, 1)">+</button>
+              <button type="button" class="pos-qty-btn" onclick="stepPosQty(event, this, 1)">+</button>
             </div>
           </td>
           <td class="text-right">
@@ -825,49 +896,37 @@ function jumpToSell(recipeId) {
   resetPosForm();
   const row = document.querySelector(`.pos-item-row[data-recipe-id="${recipeId}"]`);
   if (row) {
-    const check = row.querySelector(".pos-check");
-    check.checked = true;
     row.classList.add("selected-row");
     updatePosSummary();
   }
 }
 
-function toggleRowClick(event, td) {
+function togglePosRow(event, row) {
   if (event.target.tagName === "INPUT" || event.target.tagName === "BUTTON") return;
-  const row = td.closest("tr");
-  const check = row.querySelector(".pos-check");
-  check.checked = !check.checked;
-  onPosCheckChange(check);
-}
-
-function onPosCheckChange(checkbox) {
-  const row = checkbox.closest("tr");
-  row.classList.toggle("selected-row", checkbox.checked);
+  const isSelected = row.classList.toggle("selected-row");
   const qtyInput = row.querySelector(".pos-qty-input");
-  if (checkbox.checked && (parseFloat(qtyInput.value) || 0) <= 0) {
+  if (isSelected && (parseFloat(qtyInput.value) || 0) <= 0) {
     qtyInput.value = 1;
   }
   updatePosSummary();
 }
 
-function stepPosQty(btn, delta) {
+function stepPosQty(event, btn, delta) {
+  if (event) event.stopPropagation();
   const row = btn.closest("tr");
-  const check = row.querySelector(".pos-check");
+  const isSelected = row.classList.contains("selected-row");
   const input = row.querySelector(".pos-qty-input");
   let current = parseFloat(input.value) || 0;
 
-  if (!check.checked && delta > 0) {
-    check.checked = true;
+  if (!isSelected && delta > 0) {
     row.classList.add("selected-row");
     current = 1;
   } else {
     current = Math.max(0, current + delta);
     if (current === 0) {
-      check.checked = false;
       row.classList.remove("selected-row");
       current = 1;
     } else {
-      check.checked = true;
       row.classList.add("selected-row");
     }
   }
@@ -877,11 +936,11 @@ function stepPosQty(btn, delta) {
 
 function onPosQtyInput(input) {
   const row = input.closest("tr");
-  const check = row.querySelector(".pos-check");
   const val = parseFloat(input.value) || 0;
-  if (val > 0 && !check.checked) {
-    check.checked = true;
+  if (val > 0) {
     row.classList.add("selected-row");
+  } else {
+    row.classList.remove("selected-row");
   }
   updatePosSummary();
 }
@@ -893,21 +952,22 @@ function addCustomPosRow() {
   tr.dataset.recipeId = "";
   tr.dataset.unit = "cái";
   tr.dataset.unitCost = "0";
+  tr.setAttribute("onclick", "togglePosRow(event, this)");
   tr.innerHTML = `
-    <td class="text-center">
-      <input type="checkbox" class="pos-check" checked onchange="onPosCheckChange(this)" />
-    </td>
     <td>
-      <input type="text" class="form-control custom-pos-name" placeholder="Nhập tên món phụ (VD: Nến sinh nhật, Hộp quà...)" oninput="updatePosSummary()" style="padding:6px 10px; font-size:13.5px;" />
+      <div style="display:flex; align-items:center; gap:8px;">
+        <input type="text" class="form-control custom-pos-name" placeholder="Nhập tên món phụ (VD: Nến sinh nhật, Hộp quà...)" oninput="updatePosSummary()" style="padding:6px 10px; font-size:13.5px;" />
+        <span class="pos-selected-tag">✓ Đã chọn</span>
+      </div>
     </td>
     <td class="text-right">
       <input type="number" class="pos-price-input" value="15000" min="0" step="1000" oninput="updatePosSummary()" />
     </td>
     <td class="text-center">
       <div class="pos-qty-box">
-        <button type="button" class="pos-qty-btn" onclick="stepPosQty(this, -1)">−</button>
+        <button type="button" class="pos-qty-btn" onclick="stepPosQty(event, this, -1)">−</button>
         <input type="number" class="pos-qty-input" value="1" min="1" step="1" oninput="onPosQtyInput(this)" />
-        <button type="button" class="pos-qty-btn" onclick="stepPosQty(this, 1)">+</button>
+        <button type="button" class="pos-qty-btn" onclick="stepPosQty(event, this, 1)">+</button>
       </div>
     </td>
     <td class="text-right">
@@ -940,12 +1000,12 @@ function onCustomerNameInput() {
 function collectPosItems() {
   const selected = [];
   document.querySelectorAll("#pos-cakes-tbody .pos-item-row").forEach((row) => {
-    const check = row.querySelector(".pos-check");
+    const isSelected = row.classList.contains("selected-row");
     const qty = parseFloat(row.querySelector(".pos-qty-input")?.value) || 0;
     const price = parseFloat(row.querySelector(".pos-price-input")?.value) || 0;
     const lineTotalEl = row.querySelector(".pos-line-total");
 
-    if (check && check.checked && qty > 0) {
+    if (isSelected && qty > 0) {
       const lineTotal = Math.round(qty * price);
       if (lineTotalEl) lineTotalEl.textContent = formatVND(lineTotal);
 
@@ -981,7 +1041,7 @@ function updatePosSummary() {
 
   const previewEl = document.getElementById("pos-selected-items-text");
   if (items.length === 0) {
-    previewEl.innerHTML = `<span class="muted">👉 Hãy tích chọn ít nhất 1 loại bánh ở bảng bên trái</span>`;
+    previewEl.innerHTML = `<span class="muted">👉 Hãy bấm vào bánh khách mua ở bảng bên trái</span>`;
   } else {
     previewEl.innerHTML =
       `<strong>Đã chọn (${items.length} loại):</strong> ` +
@@ -1001,8 +1061,6 @@ function resetPosForm() {
       row.remove();
       return;
     }
-    const check = row.querySelector(".pos-check");
-    check.checked = false;
     row.classList.remove("selected-row");
     row.querySelector(".pos-qty-input").value = 1;
   });

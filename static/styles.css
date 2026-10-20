@@ -359,19 +359,66 @@ body {
   align-items: start;
 }
 
-.pos-cake-table tr.selected-row {
-  background-color: var(--primary-light);
-}
-
-.pos-cake-table tr {
-  transition: background-color 0.12s;
-}
-
-.pos-check {
-  width: 20px;
-  height: 20px;
-  accent-color: var(--primary);
+.pos-cake-table tr.pos-item-row {
   cursor: pointer;
+  transition: background-color 0.14s, box-shadow 0.14s;
+  user-select: none;
+}
+
+.pos-cake-table tr.pos-item-row:hover {
+  background-color: #f2f7fd;
+}
+
+.pos-cake-table tr.selected-row {
+  background-color: #dcebfa !important;
+  box-shadow: inset 4px 0 0 var(--primary);
+}
+
+.pos-selected-tag {
+  display: none;
+  font-size: 11px;
+  font-weight: 700;
+  background: var(--primary);
+  color: #fff;
+  padding: 2px 7px;
+  border-radius: 99px;
+  margin-left: 6px;
+  vertical-align: middle;
+}
+
+.pos-cake-table tr.selected-row .pos-selected-tag {
+  display: inline-block;
+}
+
+.pos-baked-status {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  margin-top: 4px;
+  font-size: 12.5px;
+  flex-wrap: wrap;
+}
+
+.pos-baked-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 2px 9px;
+  border-radius: 99px;
+  font-weight: 600;
+  font-size: 12px;
+}
+
+.pos-baked-pill.has-cake {
+  background: #dcfce7;
+  color: #15803d;
+  border: 1px solid #bbf7d0;
+}
+
+.pos-baked-pill.no-cake {
+  background: #f1f5f9;
+  color: #64748b;
+  border: 1px solid #e2e8f0;
 }
 
 .pos-qty-box {

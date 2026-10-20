@@ -141,7 +141,7 @@
         <div class="page-header">
           <div>
             <h1>🧾 Bán bánh & In Bill giấy</h1>
-            <p class="subtitle">Tích chọn các loại bánh khách mua, nhập tên + SĐT khách và bấm In Bill giấy ra ngay</p>
+            <p class="subtitle">Bấm trực tiếp vào bánh khách mua, kiểm tra số lượng bánh còn lại trong ngày và xuất Bill giấy ngay</p>
           </div>
           <div class="header-actions">
             <button class="btn btn-outline" onclick="openShopSettingsModal()">⚙️ Cài đặt thông tin Tiệm trên Bill</button>
@@ -149,10 +149,10 @@
         </div>
 
         <div class="pos-layout">
-          <!-- Left: Cake Checklist Table -->
+          <!-- Left: Cake Selection Table -->
           <div class="card pos-menu-card">
             <div class="pos-card-header">
-              <h2>1. Tích chọn bánh khách mua</h2>
+              <h2>1. Bấm chọn bánh khách mua</h2>
               <button class="btn btn-sm btn-secondary" onclick="addCustomPosRow()">+ Thêm món phụ / Phụ kiện</button>
             </div>
 
@@ -164,9 +164,8 @@
               <table class="data-table pos-cake-table">
                 <thead>
                   <tr>
-                    <th style="width: 44px; text-align: center;">Chọn</th>
-                    <th>Tên bánh / Sản phẩm</th>
-                    <th class="text-right" style="width: 140px;">Giá bán 1 bánh (đ)</th>
+                    <th>Tên bánh & Số bánh còn trong ngày</th>
+                    <th class="text-right" style="width: 135px;">Giá bán (đ)</th>
                     <th class="text-center" style="width: 145px;">Số lượng bánh</th>
                     <th class="text-right" style="width: 120px;">Thành tiền</th>
                   </tr>
