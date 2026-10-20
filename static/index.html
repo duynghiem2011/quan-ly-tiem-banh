@@ -1,0 +1,758 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+  <title>Tiệm Bánh Của Mình — Quản Lý Nguyên Liệu, Bán Hàng & In Bill</title>
+  <link rel="stylesheet" href="/styles.css" />
+</head>
+<body>
+  <div class="app-layout no-print">
+    <!-- Sidebar (Desktop) / Bottom Nav (Mobile) -->
+    <aside class="sidebar">
+      <div class="brand">
+        <div class="brand-icon">🥐</div>
+        <div>
+          <div class="brand-title">Bếp Bánh Cá Nhân</div>
+          <div class="brand-sub">Kho • Công thức • In Bill</div>
+        </div>
+      </div>
+
+      <nav class="nav-menu">
+        <button class="nav-item active" data-tab="dashboard" onclick="switchTab('dashboard')">
+          <span class="nav-icon">📊</span>
+          <span class="nav-text">Tổng quan</span>
+        </button>
+        <button class="nav-item" data-tab="pos" onclick="switchTab('pos')">
+          <span class="nav-icon">🧾</span>
+          <span class="nav-text">Bán bánh & In Bill</span>
+        </button>
+        <button class="nav-item" data-tab="bake" onclick="switchTab('bake')">
+          <span class="nav-icon">🧁</span>
+          <span class="nav-text">Làm bánh (Trừ kho)</span>
+        </button>
+        <button class="nav-item" data-tab="ingredients" onclick="switchTab('ingredients')">
+          <span class="nav-icon">🥚</span>
+          <span class="nav-text">Kho nguyên liệu</span>
+          <span id="nav-low-badge" class="badge-danger hidden">0</span>
+        </button>
+        <button class="nav-item" data-tab="recipes" onclick="switchTab('recipes')">
+          <span class="nav-icon">📖</span>
+          <span class="nav-text">Công thức & Giá vốn</span>
+        </button>
+        <button class="nav-item" data-tab="history" onclick="switchTab('history')">
+          <span class="nav-icon">🕒</span>
+          <span class="nav-text">Lịch sử kho</span>
+        </button>
+      </nav>
+
+      <div class="sidebar-footer">
+        <div class="lan-card" onclick="openMobileModal()">
+          <div class="lan-title">📱 Mở trên điện thoại</div>
+          <div class="lan-url" id="sidebar-lan-url">Đang tải IP...</div>
+          <div class="lan-hint">Bấm để lấy mã QR quét Wi-Fi</div>
+        </div>
+      </div>
+    </aside>
+
+    <!-- Main Content -->
+    <main class="main-content">
+      <!-- Top Mobile Header -->
+      <header class="mobile-header">
+        <div class="brand-mobile">
+          <span>🥐</span>
+          <strong>Bếp Bánh Cá Nhân</strong>
+        </div>
+        <button class="btn btn-sm btn-outline" onclick="openMobileModal()">📱 Điện thoại</button>
+      </header>
+
+      <!-- TAB 1: DASHBOARD -->
+      <section id="tab-dashboard" class="tab-panel active">
+        <div class="page-header">
+          <div>
+            <h1>Tổng quan bếp bánh</h1>
+            <p class="subtitle">Theo dõi doanh thu bán bánh, tồn kho nguyên liệu (kg/gram) và cảnh báo sắp hết</p>
+          </div>
+          <div class="header-actions">
+            <button class="btn btn-secondary" onclick="openIngredientModal()">+ Mua nguyên liệu</button>
+            <button class="btn btn-outline" onclick="switchTab('bake')">🧁 Làm bánh</button>
+            <button class="btn btn-primary" onclick="switchTab('pos')">🧾 Bán bánh & In Bill</button>
+          </div>
+        </div>
+
+        <!-- KPI Cards -->
+        <div class="stats-grid">
+          <div class="stat-card">
+            <div class="stat-label">Doanh thu bán bánh</div>
+            <div class="stat-value text-green" id="stat-sales-revenue">0 đ</div>
+            <div class="stat-note" id="stat-sales-profit">Lợi nhuận gộp: 0 đ (0 đơn)</div>
+          </div>
+          <div class="stat-card">
+            <div class="stat-label">Tổng loại nguyên liệu</div>
+            <div class="stat-value" id="stat-total-ing">0</div>
+            <div class="stat-note" id="stat-low-ing-text">Tất cả đều đủ dùng</div>
+          </div>
+          <div class="stat-card">
+            <div class="stat-label">Tổng giá trị tồn kho</div>
+            <div class="stat-value text-amber" id="stat-inventory-value">0 đ</div>
+            <div class="stat-note">Ước tính theo giá mua vào</div>
+          </div>
+          <div class="stat-card">
+            <div class="stat-label">Số công thức bánh</div>
+            <div class="stat-value" id="stat-total-recipes">0</div>
+            <div class="stat-note" id="stat-ready-recipes">0 loại đủ nguyên liệu làm ngay</div>
+          </div>
+        </div>
+
+        <!-- Low stock alert banner -->
+        <div id="low-stock-section" class="alert-box hidden">
+          <div class="alert-header">
+            <div class="alert-title">⚠️ Nguyên liệu sắp hết hoặc đã hết cần mua thêm</div>
+            <button class="btn btn-sm btn-outline" onclick="switchTab('ingredients')">Xem toàn bộ kho →</button>
+          </div>
+          <div id="low-stock-list" class="low-stock-grid"></div>
+        </div>
+
+        <div class="dashboard-columns">
+          <!-- Quick Bake Recipes -->
+          <div class="card">
+            <div class="card-header">
+              <h2>🧁 Danh sách bánh & Giá bán 1 bánh</h2>
+              <button class="btn btn-sm btn-ghost" onclick="switchTab('pos')">Đi tới Bán hàng →</button>
+            </div>
+            <div id="dashboard-quick-recipes" class="quick-recipe-list"></div>
+          </div>
+
+          <!-- Recent Transactions -->
+          <div class="card">
+            <div class="card-header">
+              <h2>🕒 Hoạt động kho gần đây</h2>
+              <button class="btn btn-sm btn-ghost" onclick="switchTab('history')">Xem tất cả →</button>
+            </div>
+            <div id="dashboard-recent-tx" class="recent-tx-list"></div>
+          </div>
+        </div>
+      </section>
+
+      <!-- TAB 2: POS (BÁN BÁNH & IN BILL GIẤY) -->
+      <section id="tab-pos" class="tab-panel">
+        <div class="page-header">
+          <div>
+            <h1>🧾 Bán bánh & In Bill giấy</h1>
+            <p class="subtitle">Tích chọn các loại bánh khách mua, nhập tên + SĐT khách và bấm In Bill giấy ra ngay</p>
+          </div>
+          <div class="header-actions">
+            <button class="btn btn-outline" onclick="openShopSettingsModal()">⚙️ Cài đặt thông tin Tiệm trên Bill</button>
+          </div>
+        </div>
+
+        <div class="pos-layout">
+          <!-- Left: Cake Checklist Table -->
+          <div class="card pos-menu-card">
+            <div class="pos-card-header">
+              <h2>1. Tích chọn bánh khách mua</h2>
+              <button class="btn btn-sm btn-secondary" onclick="addCustomPosRow()">+ Thêm món phụ / Phụ kiện</button>
+            </div>
+
+            <div class="mb-12">
+              <input type="text" id="pos-search-input" class="form-control" placeholder="🔍 Tìm nhanh tên bánh..." oninput="filterPosRows()" />
+            </div>
+
+            <div class="table-responsive">
+              <table class="data-table pos-cake-table">
+                <thead>
+                  <tr>
+                    <th style="width: 44px; text-align: center;">Chọn</th>
+                    <th>Tên bánh / Sản phẩm</th>
+                    <th class="text-right" style="width: 140px;">Giá bán 1 bánh (đ)</th>
+                    <th class="text-center" style="width: 145px;">Số lượng bánh</th>
+                    <th class="text-right" style="width: 120px;">Thành tiền</th>
+                  </tr>
+                </thead>
+                <tbody id="pos-cakes-tbody"></tbody>
+              </table>
+            </div>
+          </div>
+
+          <!-- Right: Customer Info & Bill Checkout -->
+          <div class="card pos-checkout-card">
+            <h2>2. Thông tin khách mua & Xuất Bill</h2>
+
+            <div class="form-group mt-12">
+              <label>👤 Tên khách hàng</label>
+              <input type="text" id="pos-customer-name" class="form-control" placeholder="Nhập tên khách (Mặc định: Khách lẻ)" list="customer-suggestions" oninput="onCustomerNameInput()" />
+              <datalist id="customer-suggestions"></datalist>
+            </div>
+
+            <div class="form-row">
+              <div class="form-group">
+                <label>📞 Số điện thoại</label>
+                <input type="tel" id="pos-customer-phone" class="form-control" placeholder="VD: 0909123456" />
+              </div>
+              <div class="form-group">
+                <label>💳 Thanh toán</label>
+                <select id="pos-payment-method" class="form-control">
+                  <option value="Tiền mặt">💵 Tiền mặt</option>
+                  <option value="Chuyển khoản">🏦 Chuyển khoản</option>
+                  <option value="Ship COD">🛵 Ship COD</option>
+                </select>
+              </div>
+            </div>
+
+            <div class="form-group">
+              <label>📝 Ghi chú in lên Bill / Địa chỉ giao</label>
+              <input type="text" id="pos-customer-note" class="form-control" placeholder="VD: Giao lúc 16h, ghi chữ Chúc Mừng Sinh Nhật..." />
+            </div>
+
+            <div class="form-row">
+              <div class="form-group">
+                <label>🏷️ Giảm giá (VNĐ)</label>
+                <input type="number" id="pos-discount" class="form-control" value="0" min="0" step="1000" oninput="updatePosSummary()" />
+              </div>
+              <div class="form-group">
+                <label>🛵 Phí giao hàng / Ship (VNĐ)</label>
+                <input type="number" id="pos-shipping" class="form-control" value="0" min="0" step="1000" oninput="updatePosSummary()" />
+              </div>
+            </div>
+
+            <!-- Selected summary box -->
+            <div class="pos-summary-box">
+              <div class="pos-selected-preview" id="pos-selected-items-text">
+                Chưa tích chọn món nào
+              </div>
+              <div class="pos-summary-line">
+                <span>Tạm tính:</span>
+                <strong id="pos-subtotal-val">0 đ</strong>
+              </div>
+              <div class="pos-summary-line">
+                <span>Giảm giá / Phí ship:</span>
+                <span id="pos-adj-val">0 đ</span>
+              </div>
+              <div class="pos-summary-total">
+                <span>TỔNG CỘNG THANH TOÁN:</span>
+                <strong id="pos-total-val">0 đ</strong>
+              </div>
+              <div class="pos-profit-hint" id="pos-profit-val">
+                Giá vốn nguyên liệu: 0 đ • Lãi gộp: 0 đ
+              </div>
+            </div>
+
+            <label class="checkbox-label pos-deduct-check">
+              <input type="checkbox" id="pos-deduct-stock" checked />
+              <span>🔄 Tự động trừ nguyên liệu (quy đổi từ gram sang kg trong kho)</span>
+            </label>
+
+            <div class="pos-action-buttons">
+              <button class="btn btn-primary btn-lg btn-block" onclick="submitPosOrder(true)">
+                🖨️ Lưu Đơn & In Bill Giấy Ngay
+              </button>
+              <div class="form-row" style="margin-top: 8px;">
+                <button class="btn btn-secondary flex-1" onclick="submitPosOrder(false)">
+                  💾 Chỉ lưu đơn (Không in)
+                </button>
+                <button class="btn btn-outline" onclick="resetPosForm()">
+                  🔄 Làm mới
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Order History & Reprint Section -->
+        <div class="card mt-24">
+          <div class="card-header">
+            <div>
+              <h2>📋 Danh sách Hóa đơn đã bán (Bấm để xem hoặc In lại Bill)</h2>
+            </div>
+            <button class="btn btn-sm btn-outline" onclick="exportOrdersCSV()">📥 Xuất doanh thu ra Excel (CSV)</button>
+          </div>
+
+          <div class="table-responsive">
+            <table class="data-table">
+              <thead>
+                <tr>
+                  <th>Mã Bill</th>
+                  <th>Thời gian</th>
+                  <th>Khách hàng & SĐT</th>
+                  <th>Bánh đã mua</th>
+                  <th class="text-right">Tổng thu</th>
+                  <th class="text-right">Lợi nhuận</th>
+                  <th class="text-right">Thao tác</th>
+                </tr>
+              </thead>
+              <tbody id="orders-history-tbody"></tbody>
+            </table>
+          </div>
+        </div>
+      </section>
+
+      <!-- TAB 3: BAKE / DEDUCT INVENTORY -->
+      <section id="tab-bake" class="tab-panel">
+        <div class="page-header">
+          <div>
+            <h1>🧁 Làm bánh & Tự động trừ nguyên liệu (từ Gram sang Kg kho)</h1>
+            <p class="subtitle">Chọn loại bánh bạn làm, phần mềm sẽ lấy định lượng Gram trong công thức tự động quy đổi và trừ vào số Kg trong kho</p>
+          </div>
+        </div>
+
+        <div class="bake-container">
+          <div class="card bake-form-card">
+            <h2>1. Chọn bánh và số lượng làm</h2>
+            <div class="form-group">
+              <label>Chọn công thức bánh</label>
+              <select id="bake-recipe-select" class="form-control" onchange="renderBakePreview()"></select>
+            </div>
+
+            <div class="form-row">
+              <div class="form-group">
+                <label>Số lượng mẻ làm (Hệ số nhân)</label>
+                <div class="qty-stepper">
+                  <button type="button" class="btn-step" onclick="adjustBakeBatches(-0.5)">-0.5</button>
+                  <button type="button" class="btn-step" onclick="adjustBakeBatches(-1)">-1</button>
+                  <input type="number" id="bake-batches-input" class="form-control text-center" value="1" min="0.1" step="0.5" oninput="renderBakePreview()" />
+                  <button type="button" class="btn-step" onclick="adjustBakeBatches(1)">+1</button>
+                  <button type="button" class="btn-step" onclick="adjustBakeBatches(0.5)">+0.5</button>
+                </div>
+                <small id="bake-yield-label" class="field-hint">Thành phẩm: 1 bánh</small>
+              </div>
+
+              <div class="form-group">
+                <label>Ghi chú mẻ bánh (Tuỳ chọn)</label>
+                <input type="text" id="bake-note-input" class="form-control" placeholder="VD: Nướng mẻ sáng..." />
+              </div>
+            </div>
+
+            <div class="bake-cost-summary">
+              <div>
+                <span class="muted">Tổng giá vốn nguyên liệu mẻ này:</span>
+                <strong id="bake-total-cost" class="cost-highlight">0 đ</strong>
+              </div>
+              <div>
+                <span class="muted">Giá vốn 1 bánh:</span>
+                <strong id="bake-unit-cost">0 đ</strong>
+              </div>
+              <div>
+                <span class="muted">Doanh thu dự kiến (theo giá bán 1 bánh):</span>
+                <strong id="bake-expected-rev">0 đ</strong>
+              </div>
+              <div>
+                <span class="muted">Lợi nhuận gộp dự kiến:</span>
+                <strong id="bake-expected-profit" class="text-green">0 đ</strong>
+              </div>
+            </div>
+
+            <div id="bake-shortage-warning" class="shortage-banner hidden">
+              <div class="shortage-title">⚠️ Không đủ nguyên liệu trong kho!</div>
+              <p class="shortage-sub">Một số nguyên liệu trong kho hiện ít hơn định lượng cần dùng.</p>
+              <label class="checkbox-label">
+                <input type="checkbox" id="bake-allow-negative" />
+                <span>Vẫn cho phép làm bánh (Trừ phần còn lại trong kho về 0)</span>
+              </label>
+            </div>
+
+            <button class="btn btn-primary btn-lg btn-block" onclick="submitBake()">
+              ✅ Xác nhận Làm Bánh & Trừ Nguyên Liệu
+            </button>
+          </div>
+
+          <div class="card bake-preview-card">
+            <h2>2. Chi tiết nguyên liệu sẽ trừ (Quy đổi Gram → Kg)</h2>
+            <p class="muted mb-12">Kiểm tra định lượng gram cần dùng và số lượng trừ tương ứng trong kho:</p>
+            <div id="bake-ingredients-preview"></div>
+          </div>
+        </div>
+      </section>
+
+      <!-- TAB 4: INGREDIENTS INVENTORY -->
+      <section id="tab-ingredients" class="tab-panel">
+        <div class="page-header">
+          <div>
+            <h1>🥚 Kho nguyên liệu (Quản lý theo Kg / Gram / Lít...)</h1>
+            <p class="subtitle">Lưu kho theo Kg (hoặc Gram), khi làm bánh bằng Gram phần mềm sẽ tự động chia 1000 để trừ vào số Kg trong kho</p>
+          </div>
+          <div class="header-actions">
+            <button class="btn btn-outline" onclick="exportIngredientsCSV()">📥 Xuất file Excel (CSV)</button>
+            <button class="btn btn-primary" onclick="openIngredientModal()">+ Thêm nguyên liệu mới</button>
+          </div>
+        </div>
+
+        <div class="filter-bar">
+          <div style="display:flex; gap:10px; flex-wrap:wrap; flex:1;">
+            <input type="text" id="ing-search" class="form-control search-input" placeholder="🔍 Tìm tên nguyên liệu (bột, bơ, đường, trứng...)" oninput="renderIngredients()" />
+            <select id="ing-category-filter" class="form-control" style="max-width:240px;" onchange="renderIngredients()">
+              <option value="">📂 Tất cả phân loại</option>
+            </select>
+          </div>
+          <div class="filter-pills">
+            <button class="pill active" data-filter="all" onclick="setIngFilter('all')">Tất cả</button>
+            <button class="pill" data-filter="low" onclick="setIngFilter('low')">⚠️ Sắp hết / Đã hết</button>
+          </div>
+        </div>
+
+        <div class="card table-card">
+          <div class="table-responsive">
+            <table class="data-table">
+              <thead>
+                <tr>
+                  <th>Tên nguyên liệu</th>
+                  <th>Phân loại</th>
+                  <th class="text-right">Tồn kho hiện tại (Kg & Gram)</th>
+                  <th class="text-right">Mức báo sắp hết</th>
+                  <th class="text-right">Giá vốn</th>
+                  <th class="text-right">Giá trị tồn</th>
+                  <th class="text-right">Thao tác</th>
+                </tr>
+              </thead>
+              <tbody id="ingredients-tbody"></tbody>
+            </table>
+          </div>
+        </div>
+      </section>
+
+      <!-- TAB 5: RECIPES & COSTING -->
+      <section id="tab-recipes" class="tab-panel">
+        <div class="page-header">
+          <div>
+            <h1>📖 Công thức bánh & Giá bán 1 bánh</h1>
+            <p class="subtitle">Định lượng nguyên liệu tính bằng Gram (g), tự động trừ từ Kg trong kho và tính giá vốn / lãi gộp cho từng chiếc bánh</p>
+          </div>
+          <div class="header-actions">
+            <button class="btn btn-primary" onclick="openRecipeModal()">+ Tạo công thức bánh mới</button>
+          </div>
+        </div>
+
+        <div id="recipes-grid" class="recipes-grid"></div>
+      </section>
+
+      <!-- TAB 6: TRANSACTION HISTORY -->
+      <section id="tab-history" class="tab-panel">
+        <div class="page-header">
+          <div>
+            <h1>🕒 Lịch sử nhập kho & Trừ nguyên liệu</h1>
+            <p class="subtitle">Mọi lần mua thêm nguyên liệu, làm bánh hoặc bán bánh đều được ghi rõ số Gram và số Kg đã trừ.</p>
+          </div>
+        </div>
+
+        <div class="card">
+          <div id="history-list" class="history-list"></div>
+        </div>
+      </section>
+    </main>
+  </div>
+
+  <!-- MODAL 1: ADD / EDIT INGREDIENT -->
+  <div id="modal-ingredient" class="modal-backdrop hidden no-print">
+    <div class="modal">
+      <div class="modal-header">
+        <h3 id="modal-ing-title">Thêm nguyên liệu mới</h3>
+        <button class="btn-close" onclick="closeModal('modal-ingredient')">✕</button>
+      </div>
+      <div class="modal-body">
+        <input type="hidden" id="ing-id" />
+        <div class="form-row">
+          <div class="form-group flex-2">
+            <label>Tên nguyên liệu *</label>
+            <input type="text" id="ing-name" class="form-control" placeholder="VD: Bột mì số 13, Bơ lạt Anchor, Đường bột..." />
+          </div>
+          <div class="form-group flex-1">
+            <label>Phân loại nguyên liệu *</label>
+            <select id="ing-category-select" class="form-control" onchange="onIngCategorySelectChange()">
+              <option value="Bột các loại">🌾 Bột các loại (Bột mì, bột năng, bột bắp, hạnh nhân...)</option>
+              <option value="Bơ & Phô mai">🧈 Bơ & Phô mai (Bơ lạt, Creamcheese, Mascarpone, Mozzarella...)</option>
+              <option value="Sữa & Kem béo">🥛 Sữa & Kem béo (Sữa tươi, sữa đặc, Whipping, Topping...)</option>
+              <option value="Đường & Chất tạo ngọt">🍯 Đường & Chất tạo ngọt (Đường cát, đường bột, mật ong, mạch nha...)</option>
+              <option value="Trứng">🥚 Trứng (Trứng gà, trứng vịt, lòng đỏ trứng muối...)</option>
+              <option value="Men, Muối & Phụ gia">🧂 Men, Muối & Phụ gia (Men nở, Baking powder, SP, Gelatin...)</option>
+              <option value="Socola & Cacao">🍫 Socola & Cacao (Bột cacao, Socola đen/trắng, Socola chip...)</option>
+              <option value="Hương liệu & Màu">🌿 Hương liệu & Màu (Vani, Matcha, tinh dầu, màu thực phẩm...)</option>
+              <option value="Nhân bánh & Mứt">🍓 Nhân bánh & Mứt (Nhân đậu đỏ, khoai môn, mứt dâu, việt quất...)</option>
+              <option value="Hạt & Trái cây khô">🥜 Hạt & Trái cây khô (Hạnh nhân lát, óc chó, hạt điều, nho khô...)</option>
+              <option value="Đồ mặn & Sốt">🌭 Đồ mặn & Sốt (Chà bông, xúc xích, phô mai lát, dầu trứng...)</option>
+              <option value="Trái cây tươi">🍒 Trái cây tươi (Dâu tây, xoài, nho xanh, việt quất, chuối...)</option>
+              <option value="Dầu ăn & Chất béo">🫙 Dầu ăn & Chất béo (Dầu ăn, dầu oliu, dầu dừa, Shortening...)</option>
+              <option value="Bao bì, Hộp & Phụ kiện">📦 Bao bì, Hộp & Phụ kiện (Hộp bánh, đế bánh, giấy nến, túi, nến...)</option>
+              <option value="Nguyên liệu khác">✨ Nguyên liệu khác (Tự nhập...)</option>
+            </select>
+            <input type="text" id="ing-category-custom" class="form-control mt-12 hidden" placeholder="Nhập tên phân loại riêng của bạn..." />
+          </div>
+        </div>
+
+        <div class="form-row">
+          <div class="form-group">
+            <label>Đơn vị quản lý trong kho *</label>
+            <select id="ing-unit" class="form-control" onchange="updateUnitCalcPreview()">
+              <option value="kg">Kilogram (kg) — Khuyên dùng (Tự đổi ra Gram khi làm bánh)</option>
+              <option value="g">Gram (g)</option>
+              <option value="lít">Lít (Tự đổi ra ml khi làm bánh)</option>
+              <option value="ml">Mililit (ml)</option>
+              <option value="quả">Quả / Trái</option>
+              <option value="cái">Cái / Chiếc</option>
+              <option value="hộp">Hộp</option>
+              <option value="gói">Gói / Túi</option>
+              <option value="lạng">Lạng (100g)</option>
+              <option value="muỗng">Muỗng</option>
+            </select>
+          </div>
+          <div class="form-group">
+            <label>Số lượng đang có trong kho (<span class="unit-label">kg</span>) *</label>
+            <input type="number" id="ing-stock" class="form-control" value="2" min="0" step="any" oninput="updateUnitCalcPreview()" />
+            <small class="field-hint" id="ing-stock-gram-hint">Tương đương: 2.000 g</small>
+          </div>
+          <div class="form-group">
+            <label>Báo sắp hết khi dưới (<span class="unit-label">kg</span>)</label>
+            <input type="number" id="ing-min-stock" class="form-control" value="0.5" min="0" step="any" />
+          </div>
+        </div>
+
+        <div class="cost-calc-box">
+          <div class="cost-calc-title">💰 Tính tự động giá vốn mua vào</div>
+          <p class="muted mb-8">Nhập quy cách túi/bịch bạn mua để phần mềm tự tính giá vốn trên mỗi <span class="unit-label">kg</span> và mỗi <strong>gram (g)</strong>:</p>
+          <div class="form-row">
+            <div class="form-group">
+              <label>Quy cách mua (<span class="unit-label">kg</span>)</label>
+              <input type="number" id="ing-pkg-size" class="form-control" value="1" min="0.001" step="any" oninput="updateUnitCalcPreview()" />
+            </div>
+            <div class="form-group">
+              <label>Giá tiền mua (VNĐ)</label>
+              <input type="number" id="ing-pkg-price" class="form-control" value="35000" min="0" step="500" oninput="updateUnitCalcPreview()" />
+            </div>
+          </div>
+          <div class="calc-result" id="ing-calc-preview">
+            👉 Giá vốn: <strong>35.000 đ / kg</strong> (Tương đương <strong>35 đ / 1 gram</strong>)
+          </div>
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button class="btn btn-ghost" onclick="closeModal('modal-ingredient')">Huỷ</button>
+        <button class="btn btn-primary" onclick="saveIngredient()">💾 Lưu nguyên liệu</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- MODAL 2: RESTOCK -->
+  <div id="modal-restock" class="modal-backdrop hidden no-print">
+    <div class="modal modal-sm">
+      <div class="modal-header">
+        <h3 id="restock-title">Nhập thêm hàng vào kho</h3>
+        <button class="btn-close" onclick="closeModal('modal-restock')">✕</button>
+      </div>
+      <div class="modal-body">
+        <input type="hidden" id="restock-id" />
+        <div class="restock-current-info" id="restock-current-info"></div>
+
+        <div class="form-row">
+          <div class="form-group flex-2">
+            <label>Số lượng mua thêm *</label>
+            <input type="number" id="restock-add-qty" class="form-control" placeholder="VD: 1" min="0.01" step="any" oninput="updateRestockPreview()" />
+          </div>
+          <div class="form-group flex-1">
+            <label>Đơn vị mua</label>
+            <select id="restock-add-unit" class="form-control" onchange="updateRestockPreview()"></select>
+          </div>
+        </div>
+
+        <div class="quick-qty-chips mb-12" id="restock-chips-box">
+          <button type="button" class="chip" onclick="setRestockQuick(0.5, 'kg')">+0.5 kg (500g)</button>
+          <button type="button" class="chip" onclick="setRestockQuick(1, 'kg')">+1 kg</button>
+          <button type="button" class="chip" onclick="setRestockQuick(2, 'kg')">+2 kg</button>
+          <button type="button" class="chip" onclick="setRestockQuick(5, 'kg')">+5 kg</button>
+          <button type="button" class="chip" onclick="setRestockQuick(250, 'g')">+250 g</button>
+        </div>
+
+        <div class="form-group">
+          <label>Tổng số tiền trả cho đợt mua này (VNĐ)</label>
+          <input type="number" id="restock-total-price" class="form-control" placeholder="Nhập tổng tiền mua (để trống nếu giữ giá cũ)" min="0" step="1000" oninput="updateRestockPreview()" />
+          <small class="field-hint" id="restock-price-hint"></small>
+        </div>
+
+        <div class="form-group">
+          <label>Ghi chú nơi mua / nhãn hiệu (Tuỳ chọn)</label>
+          <input type="text" id="restock-note" class="form-control" placeholder="VD: Mua tại Abby / Nhất Hương..." />
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button class="btn btn-ghost" onclick="closeModal('modal-restock')">Huỷ</button>
+        <button class="btn btn-primary" onclick="submitRestock()">➕ Cộng vào kho</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- MODAL 3: CREATE / EDIT RECIPE -->
+  <div id="modal-recipe" class="modal-backdrop hidden no-print">
+    <div class="modal modal-lg">
+      <div class="modal-header">
+        <h3 id="modal-recipe-title">Tạo công thức bánh mới</h3>
+        <button class="btn-close" onclick="closeModal('modal-recipe')">✕</button>
+      </div>
+      <div class="modal-body">
+        <input type="hidden" id="recipe-id" />
+        <div class="form-row">
+          <div class="form-group flex-2">
+            <label>Tên loại bánh / Công thức *</label>
+            <input type="text" id="recipe-name" class="form-control" placeholder="VD: Bánh Bông Lan Trứng Muối, Bánh Mì Hoa Cúc..." />
+          </div>
+          <div class="form-group flex-1">
+            <label>Phân loại bánh *</label>
+            <select id="recipe-category" class="form-control">
+              <option value="Bánh bông lan">🍰 Bánh bông lan (Bông lan trứng muối, cuộn, Chiffon...)</option>
+              <option value="Bánh kem / Bánh sinh nhật">🎂 Bánh kem / Bánh sinh nhật</option>
+              <option value="Bánh mì ngọt / Bánh mì mặn">🥖 Bánh mì ngọt / Bánh mì mặn (Hoa cúc, bơ tỏi, chà bông...)</option>
+              <option value="Bánh ngàn lớp / Pastry">🥐 Bánh ngàn lớp / Pastry (Croissant, Pateso, Tart trứng...)</option>
+              <option value="Bánh lạnh / Mousse / Cheesecake">🍮 Bánh lạnh / Mousse / Tiramisu / Cheesecake</option>
+              <option value="Bánh Su kem / Éclair">🧁 Bánh Su kem / Éclair</option>
+              <option value="Bánh quy / Cookies / Biscotti">🍪 Bánh quy / Cookies / Biscotti</option>
+              <option value="Bánh Brownie / Cupcake / Muffin">🍫 Bánh Brownie / Cupcake / Muffin</option>
+              <option value="Bánh Trung thu / Truyền thống">🥮 Bánh Trung thu / Bánh truyền thống</option>
+              <option value="Cốt bánh / Nhân bánh làm sẵn">🥣 Cốt bánh / Nhân bánh / Sốt làm sẵn</option>
+              <option value="Đồ uống / Kem / Món kèm">🥤 Đồ uống / Kem / Món bán kèm</option>
+            </select>
+          </div>
+        </div>
+
+        <div class="form-row">
+          <div class="form-group">
+            <label>1 mẻ làm ra bao nhiêu bánh? *</label>
+            <input type="number" id="recipe-yield-qty" class="form-control" value="1" min="1" step="any" oninput="updateRecipeModalCost()" />
+          </div>
+          <div class="form-group">
+            <label>Đơn vị tính *</label>
+            <select id="recipe-yield-unit" class="form-control" onchange="updateRecipeModalCost()">
+              <option value="bánh">bánh</option>
+              <option value="cái">cái</option>
+              <option value="ổ">ổ</option>
+              <option value="hộp">hộp</option>
+              <option value="khay">khay</option>
+              <option value="phần">phần</option>
+            </select>
+          </div>
+          <div class="form-group">
+            <label>Trọng lượng 1 bánh (Gram)</label>
+            <input type="number" id="recipe-cake-weight" class="form-control" value="250" min="0" step="10" placeholder="VD: 250g" />
+          </div>
+          <div class="form-group">
+            <label class="text-green">💵 Giá bán của 1 bánh (VNĐ) *</label>
+            <input type="number" id="recipe-selling-price" class="form-control" value="65000" min="0" step="1000" oninput="updateRecipeModalCost()" style="border-color: var(--green); font-weight:700;" />
+          </div>
+        </div>
+
+        <div class="recipe-ingredients-builder">
+          <div class="builder-header">
+            <div>
+              <label style="margin-bottom:2px;">📋 Định lượng nguyên liệu cho 1 mẻ bánh (Nhập bằng Gram, tự trừ từ Kg trong kho) *</label>
+              <div class="muted" style="font-size:12px;">Ví dụ: Kho lưu bằng <strong>kg</strong>, bạn chọn đơn vị <strong>g (Gram)</strong> và nhập <strong>150</strong> → Phần mềm sẽ tự trừ <strong>0.15 kg</strong> trong kho!</div>
+            </div>
+            <button type="button" class="btn btn-sm btn-secondary" onclick="addRecipeItemRow()">+ Thêm nguyên liệu</button>
+          </div>
+          <div id="recipe-items-container" class="recipe-items-rows"></div>
+          <div class="recipe-cost-live" id="recipe-modal-cost-bar">
+            Tổng giá vốn nguyên liệu: <strong>0 đ</strong>
+          </div>
+        </div>
+
+        <div class="form-group mt-12">
+          <label>Ghi chú cách làm / Nhiệt độ nướng (Tuỳ chọn)</label>
+          <textarea id="recipe-notes" class="form-control" rows="2" placeholder="VD: Nướng 165°C trong 35 phút, rãnh dưới..."></textarea>
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button class="btn btn-ghost" onclick="closeModal('modal-recipe')">Huỷ</button>
+        <button class="btn btn-primary" onclick="saveRecipe()">💾 Lưu công thức bánh</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- MODAL 4: MOBILE WIFI QR ACCESS -->
+  <div id="modal-mobile" class="modal-backdrop hidden no-print">
+    <div class="modal modal-sm text-center">
+      <div class="modal-header">
+        <h3>📱 Mở trên Điện thoại / iPad</h3>
+        <button class="btn-close" onclick="closeModal('modal-mobile')">✕</button>
+      </div>
+      <div class="modal-body">
+        <p class="muted mb-12">Đảm bảo Điện thoại và máy Mac đang kết nối <strong>cùng 1 mạng Wi-Fi</strong>, sau đó mở Camera quét mã QR hoặc nhập đường dẫn dưới đây vào Safari / Chrome:</p>
+        <div class="qr-box">
+          <img id="mobile-qr-img" alt="QR Code kết nối" width="200" height="200" />
+        </div>
+        <div class="url-copy-box">
+          <code id="mobile-url-text">http://192.168.1.x:8080</code>
+          <button class="btn btn-sm btn-secondary" onclick="copyMobileUrl()">Sao chép</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- MODAL 5: SHOP SETTINGS FOR BILL -->
+  <div id="modal-shop-settings" class="modal-backdrop hidden no-print">
+    <div class="modal modal-sm">
+      <div class="modal-header">
+        <h3>⚙️ Cài đặt thông tin Tiệm in trên Bill</h3>
+        <button class="btn-close" onclick="closeModal('modal-shop-settings')">✕</button>
+      </div>
+      <div class="modal-body">
+        <div class="form-group">
+          <label>Tên tiệm bánh (In đậm đầu Bill)</label>
+          <input type="text" id="setting-shop-name" class="form-control" placeholder="VD: TIỆM BÁNH NHÀ MÂY" />
+        </div>
+        <div class="form-group">
+          <label>Số điện thoại liên hệ</label>
+          <input type="text" id="setting-shop-phone" class="form-control" placeholder="VD: 0909.xxx.xxx" />
+        </div>
+        <div class="form-group">
+          <label>Địa chỉ / Slogan</label>
+          <input type="text" id="setting-shop-address" class="form-control" placeholder="VD: 123 Nguyễn Huệ, Q.1, TP.HCM" />
+        </div>
+        <div class="form-group">
+          <label>Lời cảm ơn cuối Bill</label>
+          <input type="text" id="setting-bill-footer" class="form-control" placeholder="VD: Cảm ơn quý khách đã ủng hộ ❤️" />
+        </div>
+        <div class="form-group">
+          <label>Khổ giấy máy in mặc định</label>
+          <select id="setting-paper-size" class="form-control">
+            <option value="k80">Khổ bill nhiệt K80 (80mm - Phổ biến nhất)</option>
+            <option value="k58">Khổ bill nhiệt nhỏ K58 (58mm)</option>
+            <option value="a5">Khổ giấy thường A5 / A4</option>
+          </select>
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button class="btn btn-ghost" onclick="closeModal('modal-shop-settings')">Đóng</button>
+        <button class="btn btn-primary" onclick="saveShopSettings()">💾 Lưu cài đặt Bill</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- MODAL 6: PAPER BILL PREVIEW & PRINT -->
+  <div id="modal-bill-preview" class="modal-backdrop hidden no-print">
+    <div class="modal modal-sm">
+      <div class="modal-header">
+        <h3>🧾 Xem trước Bill giấy</h3>
+        <button class="btn-close" onclick="closeModal('modal-bill-preview')">✕</button>
+      </div>
+      <div class="modal-body bill-modal-body">
+        <div class="bill-paper-controls mb-12">
+          <label class="muted" style="font-size:12.5px;">Chọn khổ giấy in:</label>
+          <select id="preview-paper-size" class="form-control" style="width:auto; padding:5px 10px; font-size:13px;" onchange="changePreviewPaperSize(this.value)">
+            <option value="k80">Khổ K80 (80mm)</option>
+            <option value="k58">Khổ K58 (58mm)</option>
+            <option value="a5">Khổ lớn A5 / A4</option>
+          </select>
+        </div>
+        <!-- Preview box -->
+        <div id="bill-preview-box" class="receipt-paper k80"></div>
+      </div>
+      <div class="modal-footer">
+        <button class="btn btn-ghost" onclick="closeModal('modal-bill-preview')">Đóng</button>
+        <button class="btn btn-primary btn-lg" onclick="triggerBrowserPrint()">🖨️ In Bill Giấy Ngay</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- DEDICATED PRINT-ONLY AREA (Rendered when printing paper receipt) -->
+  <div id="print-receipt-area" class="print-only"></div>
+
+  <!-- TOAST NOTIFICATION -->
+  <div id="toast" class="toast hidden no-print"></div>
+
+  <script src="/app.js"></script>
+</body>
+</html>
