@@ -121,6 +121,8 @@ def init_db():
     ensure_column(cur, "recipes", "cake_weight_gram", "REAL NOT NULL DEFAULT 0")
     ensure_column(cur, "recipes", "image_url", "TEXT DEFAULT ''")
     ensure_column(cur, "recipes", "baked_stock", "REAL NOT NULL DEFAULT 0")
+    ensure_column(cur, "recipes", "manual_today_adj", "REAL NOT NULL DEFAULT 0")
+    ensure_column(cur, "recipes", "manual_adj_date", "TEXT DEFAULT ''")
     cur.execute("UPDATE recipes SET image_url = '/flan-gato.png' WHERE LOWER(name) LIKE '%flan%' AND (image_url IS NULL OR image_url = '')")
 
     cur.execute("""
@@ -364,21 +366,21 @@ class BakeryRequestHandler(http.server.SimpleHTTPRequestHandler):
                             })
 
                 # Calculate baked_today & sold_today for this recipe
-                baked_today = 0.0
+                tx_baked_today = 0.0
                 for tx in tx_rows:
                     if tx.get("type") == "BAKE" and str(tx.get("created_at") or "").startswith(today_prefix):
                         title_str = str(tx.get("title") or "")
                         if title_str.startswith("Bán bánh"):
                             continue
                         if tx.get("recipe_id") == r["id"] and (tx.get("baked_qty") or 0) > 0:
-                            baked_today += float(tx["baked_qty"])
+                            tx_baked_today += float(tx["baked_qty"])
                         elif not tx.get("recipe_id") and r["name"].lower() in title_str.lower():
                             import re
                             m = re.search(r"\(([\d\.]+)\s+", title_str)
                             if m:
-                                baked_today += float(m.group(1))
+                                tx_baked_today += float(m.group(1))
                             else:
-                                baked_today += float(r.get("yield_qty") or 1)
+                                tx_baked_today += float(r.get("yield_qty") or 1)
 
                 sold_today = 0.0
                 for o in order_rows:
@@ -386,6 +388,10 @@ class BakeryRequestHandler(http.server.SimpleHTTPRequestHandler):
                         for o_it in (o.get("items") or []):
                             if o_it.get("recipe_id") == r["id"]:
                                 sold_today += float(o_it.get("qty") or 0)
+
+                manual_adj = float(r.get("manual_today_adj") or 0) if str(r.get("manual_adj_date") or "") == today_prefix else 0.0
+                baked_today = max(0.0, round(tx_baked_today + manual_adj, 2))
+                remaining_today = max(0.0, round(baked_today - sold_today, 2))
 
                 r["items"] = items
                 r["total_cost"] = round(total_batch_cost, 2)  # Giá vốn cả 1 mẻ
@@ -396,12 +402,12 @@ class BakeryRequestHandler(http.server.SimpleHTTPRequestHandler):
                 r["max_batches"] = max_batches if max_batches is not None else 0
                 r["max_cakes"] = int((max_batches or 0) * yield_qty)
                 r["shortages"] = shortages
-                r["baked_today"] = round(baked_today, 2)
+                r["tx_baked_today"] = round(tx_baked_today, 2)
+                r["manual_today_adj"] = round(manual_adj, 2)
+                r["baked_today"] = baked_today
                 r["sold_today"] = round(sold_today, 2)
-                calc_remaining = max(0.0, round(baked_today - sold_today, 2))
-                db_baked_stock = round(float(r.get("baked_stock") or 0), 2)
-                r["baked_stock"] = calc_remaining if baked_today > 0 else db_baked_stock
-                r["remaining_today"] = r["baked_stock"]
+                r["baked_stock"] = remaining_today
+                r["remaining_today"] = remaining_today
 
             cur.execute("SELECT * FROM activity_logs ORDER BY id DESC LIMIT 200")
             activity_rows = [dict(r) for r in cur.fetchall()]
@@ -1083,6 +1089,62 @@ class BakeryRequestHandler(http.server.SimpleHTTPRequestHandler):
                     cur.execute(f"DELETE FROM activity_logs WHERE id IN ({placeholders})", clean_ids)
                 conn.commit()
                 return self.send_json({"ok": True})
+
+            # 14. Manual Adjust Daily Baked Cake Count
+            if path == "/api/recipes/adjust_baked":
+                recipe_id = int(data.get("recipe_id") or 0)
+                cur.execute("SELECT * FROM recipes WHERE id = ?", (recipe_id,))
+                rec = cur.fetchone()
+                if not rec:
+                    return self.send_json({"error": "Không tìm thấy loại bánh."}, 404)
+
+                today_prefix = datetime.now().strftime("%Y-%m-%d")
+                cur.execute("SELECT * FROM transactions WHERE type = 'BAKE' ORDER BY id DESC LIMIT 100")
+                tx_rows = [dict(r) for r in cur.fetchall()]
+                tx_baked_today = 0.0
+                for tx in tx_rows:
+                    if str(tx.get("created_at") or "").startswith(today_prefix):
+                        title_str = str(tx.get("title") or "")
+                        if title_str.startswith("Bán bánh"):
+                            continue
+                        if tx.get("recipe_id") == recipe_id and (tx.get("baked_qty") or 0) > 0:
+                            tx_baked_today += float(tx["baked_qty"])
+                        elif not tx.get("recipe_id") and rec["name"].lower() in title_str.lower():
+                            import re
+                            m = re.search(r"\(([\d\.]+)\s+", title_str)
+                            if m:
+                                tx_baked_today += float(m.group(1))
+                            else:
+                                tx_baked_today += float(rec["yield_qty"] or 1)
+
+                old_adj = float(rec["manual_today_adj"] or 0) if str(rec["manual_adj_date"] or "") == today_prefix else 0.0
+                old_baked_today = max(0.0, round(tx_baked_today + old_adj, 2))
+
+                if "set_baked_today" in data and data["set_baked_today"] is not None:
+                    new_baked_today = max(0.0, round(float(data["set_baked_today"]), 2))
+                else:
+                    delta = float(data.get("delta") or 0)
+                    new_baked_today = max(0.0, round(old_baked_today + delta, 2))
+
+                new_adj = round(new_baked_today - tx_baked_today, 2)
+                diff = round(new_baked_today - old_baked_today, 2)
+
+                cur.execute("""
+                    UPDATE recipes
+                    SET manual_today_adj = ?, manual_adj_date = ?, updated_at = ?
+                    WHERE id = ?
+                """, (new_adj, today_prefix, now, recipe_id))
+
+                if abs(diff) > 0.001:
+                    sign = "+" if diff > 0 else ""
+                    log_activity(
+                        cur,
+                        "BAKE",
+                        f"Điều chỉnh thủ công bánh hôm nay ({rec['name']}): {old_baked_today:g} → {new_baked_today:g} bánh ({sign}{diff:g})",
+                        now
+                    )
+                conn.commit()
+                return self.send_json({"ok": True, "baked_today": new_baked_today})
 
             return self.send_json({"error": "Không tìm thấy API."}, 404)
         except Exception as e:

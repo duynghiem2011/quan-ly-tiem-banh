@@ -171,19 +171,22 @@ function recomputeRecipesInState(st) {
       }
     });
 
-    let bakedToday = 0;
+    let txBakedToday = 0;
     (st.transactions || []).forEach((tx) => {
       if (tx.type === "BAKE" && String(tx.created_at || "").startsWith(todayPrefix)) {
         const titleStr = String(tx.title || "");
         if (titleStr.startsWith("Bán bánh")) return;
         if (Number(tx.recipe_id) === Number(r.id) && Number(tx.baked_qty) > 0) {
-          bakedToday += Number(tx.baked_qty);
+          txBakedToday += Number(tx.baked_qty);
         } else if (!tx.recipe_id && titleStr.toLowerCase().includes(String(r.name || "").toLowerCase())) {
           const m = titleStr.match(/\(([\d\.]+)\s+/);
-          bakedToday += m ? parseFloat(m[1]) : Number(r.yield_qty) || 1;
+          txBakedToday += m ? parseFloat(m[1]) : Number(r.yield_qty) || 1;
         }
       }
     });
+
+    const manualAdj = r.manual_adj_date === todayPrefix ? Number(r.manual_today_adj) || 0 : 0;
+    const bakedToday = Math.max(0, Number((txBakedToday + manualAdj).toFixed(2)));
 
     let soldToday = 0;
     (st.orders || []).forEach((o) => {
@@ -202,12 +205,13 @@ function recomputeRecipesInState(st) {
     r.max_batches = maxBatches !== null ? maxBatches : 0;
     r.max_cakes = Math.floor(r.max_batches * yieldQty);
     r.shortages = shortages;
-    r.baked_today = Number(bakedToday.toFixed(2));
+    r.tx_baked_today = Number(txBakedToday.toFixed(2));
+    r.manual_today_adj = Number(manualAdj.toFixed(2));
+    r.baked_today = bakedToday;
     r.sold_today = Number(soldToday.toFixed(2));
     const calcRem = Math.max(0, Number((bakedToday - soldToday).toFixed(2)));
-    const dbStock = Number(r.baked_stock) || 0;
-    r.baked_stock = bakedToday > 0 ? calcRem : dbStock;
-    r.remaining_today = r.baked_stock;
+    r.baked_stock = calcRem;
+    r.remaining_today = calcRem;
   });
 
   if (st.server_info) {
@@ -588,6 +592,42 @@ async function handleVercelLocalPost(path, data) {
     pushLocalActivity(st, "SETTINGS", `Cập nhật thông tin cửa hàng trên bill: ${st.shop_settings.shop_name || "MỀM BARKERY"}`, now);
     saveLocalVercelState(st);
     return { ok: true };
+  }
+
+  if (path === "/api/recipes/adjust_baked") {
+    const r = (st.recipes || []).find((x) => x.id === Number(data.recipe_id));
+    if (!r) throw new Error("Không tìm thấy công thức bánh");
+    const todayPrefix = now.slice(0, 10);
+    let txBakedToday = 0;
+    (st.transactions || []).forEach((tx) => {
+      if (tx.type === "BAKE" && String(tx.created_at || "").startsWith(todayPrefix)) {
+        const titleStr = String(tx.title || "");
+        if (titleStr.startsWith("Bán bánh")) return;
+        if (Number(tx.recipe_id) === Number(r.id) && Number(tx.baked_qty) > 0) {
+          txBakedToday += Number(tx.baked_qty);
+        } else if (!tx.recipe_id && titleStr.toLowerCase().includes(String(r.name || "").toLowerCase())) {
+          const m = titleStr.match(/\(([\d\.]+)\s+/);
+          txBakedToday += m ? parseFloat(m[1]) : Number(r.yield_qty) || 1;
+        }
+      }
+    });
+    const curAdj = r.manual_adj_date === todayPrefix ? Number(r.manual_today_adj) || 0 : 0;
+    const curBakedToday = Math.max(0, Number((txBakedToday + curAdj).toFixed(2)));
+    let newBakedToday = curBakedToday;
+    if (data.set_baked_today !== undefined && data.set_baked_today !== null) {
+      newBakedToday = Math.max(0, Number(parseFloat(data.set_baked_today).toFixed(2)));
+    } else {
+      newBakedToday = Math.max(0, Number((curBakedToday + (parseFloat(data.delta) || 0)).toFixed(2)));
+    }
+    r.manual_today_adj = Number((newBakedToday - txBakedToday).toFixed(2));
+    r.manual_adj_date = todayPrefix;
+    const diff = Number((newBakedToday - curBakedToday).toFixed(2));
+    if (diff !== 0) {
+      const signStr = diff > 0 ? `+${diff}` : `${diff}`;
+      pushLocalActivity(st, "BAKE", `Chỉnh tay số lượng bánh hôm nay (${r.name}): ${signStr} ${r.yield_unit || "ổ"} (Tổng hôm nay: ${newBakedToday} ${r.yield_unit || "ổ"})`, now);
+    }
+    saveLocalVercelState(st);
+    return { ok: true, baked_today: newBakedToday };
   }
 
   if (path === "/api/transactions/undo") {
@@ -1331,6 +1371,7 @@ async function saveShopSettings() {
 
 /* ==================== 3. BAKE TAB (GRAM -> KG AUTO DEDUCTION) ==================== */
 function renderBakeTab(preserveRecipeId) {
+  renderBakeDailySummary();
   const select = document.getElementById("bake-recipe-select");
   if (STATE.recipes.length === 0) {
     select.innerHTML = `<option value="">-- Chưa có công thức bánh --</option>`;
@@ -1349,6 +1390,125 @@ function renderBakeTab(preserveRecipeId) {
     .join("");
 
   renderBakePreview();
+}
+
+function renderBakeDailySummary() {
+  const tbody = document.getElementById("bake-daily-summary-tbody");
+  if (!tbody) return;
+  const totalBakedEl = document.getElementById("total-baked-today-val");
+  const totalSoldEl = document.getElementById("total-sold-today-val");
+  const totalRemEl = document.getElementById("total-remaining-today-val");
+
+  const recipes = STATE.recipes || [];
+  let sumBaked = 0;
+  let sumSold = 0;
+  let sumRem = 0;
+
+  recipes.forEach((r) => {
+    sumBaked += Number(r.baked_today) || 0;
+    sumSold += Number(r.sold_today) || 0;
+    sumRem += Number(r.remaining_today !== undefined ? r.remaining_today : r.baked_stock) || 0;
+  });
+
+  if (totalBakedEl) totalBakedEl.textContent = formatNum(sumBaked);
+  if (totalSoldEl) totalSoldEl.textContent = formatNum(sumSold);
+  if (totalRemEl) totalRemEl.textContent = formatNum(sumRem);
+
+  if (recipes.length === 0) {
+    tbody.innerHTML = `<tr><td colspan="5" class="muted" style="text-align:center;">Chưa có công thức bánh nào.</td></tr>`;
+    return;
+  }
+
+  tbody.innerHTML = recipes
+    .map((r) => {
+      const unit = escapeHtml(r.yield_unit || "ổ");
+      const bakedToday = Number(r.baked_today) || 0;
+      const soldToday = Number(r.sold_today) || 0;
+      const remToday = Number(r.remaining_today !== undefined ? r.remaining_today : r.baked_stock) || 0;
+      const txBaked = Number(r.tx_baked_today) || 0;
+      const manualAdj = Number(r.manual_today_adj) || 0;
+
+      const subNote =
+        manualAdj !== 0
+          ? `<div style="font-size:0.74rem; color:#8d5b4c; margin-top:2px;">Nấu trừ kho: ${formatNum(txBaked)} ${unit} • Chỉnh tay: ${manualAdj > 0 ? "+" : ""}${formatNum(manualAdj)} ${unit}</div>`
+          : txBaked > 0
+            ? `<div style="font-size:0.74rem; color:#2e7d32; margin-top:2px;">Nấu từ trừ kho: ${formatNum(txBaked)} ${unit}</div>`
+            : "";
+
+      const remBadgeColor = remToday > 0 ? "background:#e8f5e9; color:#2e7d32; border:1px solid #a5d6a7;" : "background:#fff3e0; color:#e65100; border:1px solid #ffcc80;";
+
+      return `
+        <tr>
+          <td>
+            <div style="font-weight:700; color:#4a2c2a;">🧁 ${escapeHtml(r.name)}</div>
+            ${subNote}
+          </td>
+          <td style="text-align:center;">
+            <span style="font-weight:800; font-size:0.95rem; color:#5d4037; background:#fdf6f0; border:1px solid #eadcd3; padding:4px 10px; border-radius:999px;">
+              ${formatNum(bakedToday)} ${unit}
+            </span>
+          </td>
+          <td style="text-align:center;">
+            <span style="font-weight:700; font-size:0.9rem; color:#8d5b4c;">
+              ${formatNum(soldToday)} ${unit}
+            </span>
+          </td>
+          <td style="text-align:center;">
+            <span style="font-weight:800; font-size:0.95rem; padding:4px 10px; border-radius:999px; ${remBadgeColor}">
+              ${formatNum(remToday)} ${unit}
+            </span>
+          </td>
+          <td style="text-align:center;">
+            <div style="display:inline-flex; align-items:center; gap:5px; flex-wrap:wrap; justify-content:center;">
+              <button type="button" class="btn btn-outline btn-xs" style="min-width:30px; font-weight:800;" onclick="adjustDailyBaked(${r.id}, -1)" title="Trừ bớt 1 ${unit}">−1</button>
+              <input
+                type="number"
+                min="0"
+                step="1"
+                value="${bakedToday}"
+                onchange="setDailyBaked(${r.id}, this.value)"
+                style="width:68px; text-align:center; font-weight:700; padding:4px 6px; border:1px solid #d7ccc8; border-radius:8px;"
+                title="Nhập trực tiếp tổng số lượng đã làm hôm nay"
+              />
+              <button type="button" class="btn btn-outline btn-xs" style="min-width:30px; font-weight:800;" onclick="adjustDailyBaked(${r.id}, 1)" title="Cộng thêm 1 ${unit}">+1</button>
+              <button type="button" class="btn btn-outline btn-xs" style="min-width:34px; font-weight:700;" onclick="adjustDailyBaked(${r.id}, 5)" title="Cộng thêm 5 ${unit}">+5</button>
+              ${
+                bakedToday > 0
+                  ? `<button type="button" class="btn btn-danger btn-xs" style="padding:4px 7px;" onclick="setDailyBaked(${r.id}, 0)" title="Đặt về 0">Về 0</button>`
+                  : ""
+              }
+            </div>
+          </td>
+        </tr>
+      `;
+    })
+    .join("");
+}
+
+async function adjustDailyBaked(recipeId, delta) {
+  try {
+    await apiPost("/api/recipes/adjust_baked", {
+      recipe_id: Number(recipeId),
+      delta: Number(delta)
+    });
+    await loadState();
+  } catch (err) {
+    showToast(err.message, true);
+  }
+}
+
+async function setDailyBaked(recipeId, val) {
+  const num = Math.max(0, parseFloat(val) || 0);
+  try {
+    await apiPost("/api/recipes/adjust_baked", {
+      recipe_id: Number(recipeId),
+      set_baked_today: num
+    });
+    showToast("✅ Đã cập nhật số lượng bánh hôm nay!");
+    await loadState();
+  } catch (err) {
+    showToast(err.message, true);
+  }
 }
 
 function adjustBakeBatches(delta) {

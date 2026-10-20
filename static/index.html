@@ -357,6 +357,38 @@
             <div id="bake-ingredients-preview"></div>
           </div>
         </div>
+
+        <!-- DAILY BAKED CAKES SUMMARY & MANUAL ADJUSTMENT -->
+        <div class="card mt-24">
+          <div class="card-header history-card-header">
+            <div>
+              <h2>3. 📊 Tổng số lượng bánh hôm nay của từng loại đã làm (Cộng / Trừ thủ công)</h2>
+              <p class="muted" style="font-size: 13px; margin-top: 2px;">
+                Theo dõi số lượng bánh đã làm trong ngày của từng loại. Bạn có thể bấm <strong>−1 / +1</strong> hoặc nhập số trực tiếp để cộng thêm / trừ bớt bánh thủ công (không ảnh hưởng tới kho nguyên liệu).
+              </p>
+            </div>
+            <div class="bake-daily-totals-bar" id="bake-daily-totals-bar">
+              <span class="pos-baked-pill has-cake">🧁 Tổng đã làm hôm nay: <strong id="total-baked-today-val">0</strong> bánh</span>
+              <span class="pos-baked-pill no-cake">🛒 Đã bán hôm nay: <strong id="total-sold-today-val">0</strong> bánh</span>
+              <span class="pos-baked-pill has-cake" style="background:#e0f2fe; color:#0369a1; border-color:#bae6fd;">✨ Còn lại trên quầy: <strong id="total-remaining-today-val">0</strong> bánh</span>
+            </div>
+          </div>
+
+          <div class="table-responsive">
+            <table class="data-table">
+              <thead>
+                <tr>
+                  <th>Tên loại bánh</th>
+                  <th class="text-center" style="width: 240px;">Tổng bánh đã làm hôm nay (Chỉnh thủ công)</th>
+                  <th class="text-center" style="width: 140px;">Đã bán hôm nay</th>
+                  <th class="text-center" style="width: 160px;">Còn lại trong ngày</th>
+                  <th class="text-right" style="width: 150px;">Thao tác nhanh</th>
+                </tr>
+              </thead>
+              <tbody id="bake-daily-summary-tbody"></tbody>
+            </table>
+          </div>
+        </div>
       </section>
 
       <!-- TAB 4: INGREDIENTS INVENTORY -->
