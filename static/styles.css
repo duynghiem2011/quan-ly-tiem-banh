@@ -1,23 +1,23 @@
 :root {
-  --bg: #fdfaf6;
+  --bg: #f3f7fd;
   --surface: #ffffff;
-  --surface-alt: #f8f2ea;
-  --border: #ebe0d2;
-  --text: #2c221e;
-  --text-muted: #7a6a5e;
-  --primary: #c86d3b;
-  --primary-hover: #b0592a;
-  --primary-light: #fdf0e7;
-  --secondary: #5c4332;
-  --green: #227c4d;
-  --green-bg: #eaf6ef;
-  --amber: #b4690e;
-  --amber-bg: #fef4e6;
-  --danger: #c93b2b;
-  --danger-bg: #fdeceb;
-  --radius: 14px;
-  --radius-sm: 9px;
-  --shadow: 0 4px 20px rgba(68, 42, 22, 0.06);
+  --surface-alt: #eaf1fb;
+  --border: #d5e3f5;
+  --text: #1e2d40;
+  --text-muted: #5d738f;
+  --primary: #6b8fc2;
+  --primary-hover: #567bb0;
+  --primary-light: #e5effb;
+  --secondary: #39557a;
+  --green: #2d8a61;
+  --green-bg: #e6f6ee;
+  --amber: #4b74aa;
+  --amber-bg: #e8f1fc;
+  --danger: #d45b5b;
+  --danger-bg: #fdeeee;
+  --radius: 16px;
+  --radius-sm: 10px;
+  --shadow: 0 6px 24px rgba(86, 123, 176, 0.09);
 }
 
 * {
@@ -29,6 +29,13 @@
 body {
   font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
   background-color: var(--bg);
+  background-image: repeating-linear-gradient(
+    90deg,
+    #f6f9fe 0px,
+    #f6f9fe 24px,
+    #eaf2fc 24px,
+    #eaf2fc 32px
+  );
   color: var(--text);
   line-height: 1.5;
   -webkit-font-smoothing: antialiased;
@@ -462,12 +469,12 @@ body {
   padding: 10px 12px;
   border-radius: var(--radius-sm);
   margin-bottom: 14px;
-  border: 1px solid #f3d2bd;
+  border: 1px solid #c3d9f5;
 }
 
 /* RECEIPT PAPER PREVIEW & THERMAL PRINT */
 .bill-modal-body {
-  background: #ece7e1;
+  background: #e3edf8;
   display: flex;
   flex-direction: column;
   align-items: center;
@@ -970,7 +977,7 @@ body {
 .form-control:focus {
   outline: none;
   border-color: var(--primary);
-  box-shadow: 0 0 0 3px rgba(200, 109, 59, 0.15);
+  box-shadow: 0 0 0 3px rgba(107, 143, 194, 0.22);
 }
 
 .field-hint {
@@ -1019,11 +1026,11 @@ body {
 
 .btn-secondary {
   background: var(--primary-light);
-  color: var(--primary);
+  color: var(--secondary);
 }
 
 .btn-secondary:hover {
-  background: #f9decb;
+  background: #d3e5fa;
 }
 
 .btn-outline {
@@ -1059,7 +1066,7 @@ body {
 .modal-backdrop {
   position: fixed;
   inset: 0;
-  background: rgba(32, 20, 12, 0.5);
+  background: rgba(24, 42, 66, 0.45);
   display: flex;
   align-items: center;
   justify-content: center;
@@ -1236,13 +1243,13 @@ body {
   position: fixed;
   bottom: 24px;
   right: 24px;
-  background: #231915;
+  background: #23364d;
   color: #fff;
   padding: 13px 20px;
   border-radius: var(--radius-sm);
   font-weight: 600;
   font-size: 14px;
-  box-shadow: 0 10px 25px rgba(0,0,0,0.2);
+  box-shadow: 0 10px 25px rgba(35, 54, 77, 0.25);
   z-index: 2000;
 }
 

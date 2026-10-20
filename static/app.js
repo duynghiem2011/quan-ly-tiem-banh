@@ -90,7 +90,7 @@ function formatNum(num) {
 function showToast(msg, isError = false) {
   const el = document.getElementById("toast");
   el.textContent = msg;
-  el.style.background = isError ? "#c93b2b" : "#231915";
+  el.style.background = isError ? "#d45b5b" : "#2c4463";
   el.classList.remove("hidden");
   clearTimeout(window.__toastTimer);
   window.__toastTimer = setTimeout(() => {
