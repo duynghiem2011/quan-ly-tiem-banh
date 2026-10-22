@@ -175,9 +175,12 @@
 
           <!-- Right: Customer Info & Bill Checkout -->
           <div class="card pos-checkout-card">
-            <h2>2. Thông tin khách mua &amp; Xuất Bill</h2>
+            <div class="pos-checkout-header">
+              <h2>2. Thông tin khách &amp; Xuất Bill</h2>
+              <span class="muted" style="font-size:12px;">Đơn tự lưu vào hệ thống</span>
+            </div>
 
-            <div class="form-row mt-12">
+            <div class="pos-form-grid">
               <div class="form-group">
                 <label>👤 Tên khách hàng</label>
                 <input type="text" id="pos-customer-name" class="form-control" placeholder="Mặc định: Khách lẻ" list="customer-suggestions" oninput="onCustomerNameInput()" />
@@ -189,8 +192,8 @@
               </div>
             </div>
 
-            <div class="form-row">
-              <div class="form-group" style="flex: 0 1 155px;">
+            <div class="pos-form-grid">
+              <div class="form-group">
                 <label>💳 Thanh toán</label>
                 <select id="pos-payment-method" class="form-control">
                   <option value="Tiền mặt">💵 Tiền mặt</option>
@@ -198,19 +201,19 @@
                   <option value="Ship COD">🛵 Ship COD</option>
                 </select>
               </div>
-              <div class="form-group" style="flex: 1 1 180px;">
-                <label>📝 Ghi chú Bill / Địa chỉ giao</label>
-                <input type="text" id="pos-customer-note" class="form-control" placeholder="VD: Giao 16h, ghi chữ Sinh Nhật..." />
+              <div class="form-group">
+                <label>📝 Ghi chú / Địa chỉ giao</label>
+                <input type="text" id="pos-customer-note" class="form-control" placeholder="VD: Giao 16h, chữ Sinh Nhật..." />
               </div>
             </div>
 
-            <div class="form-row">
+            <div class="pos-form-grid">
               <div class="form-group">
-                <label>🏷️ Giảm giá (VNĐ)</label>
+                <label>🏷️ Giảm giá (đ)</label>
                 <input type="number" id="pos-discount" class="form-control" value="0" min="0" step="1000" oninput="updatePosSummary()" />
               </div>
               <div class="form-group">
-                <label>🛵 Phí giao hàng / Ship (VNĐ)</label>
+                <label>🛵 Phí ship (đ)</label>
                 <input type="number" id="pos-shipping" class="form-control" value="0" min="0" step="1000" oninput="updatePosSummary()" />
               </div>
             </div>
@@ -218,30 +221,30 @@
             <!-- Selected summary box -->
             <div class="pos-summary-box">
               <div class="pos-selected-preview" id="pos-selected-items-text">
-                Chưa tích chọn món nào
+                <span class="muted" style="font-size:12.5px;">👉 Hãy bấm chọn bánh ở danh sách bên trái</span>
               </div>
               <div class="pos-summary-line">
-                <span>Tạm tính:</span>
-                <strong id="pos-subtotal-val">0 đ</strong>
+                <span class="pos-sum-label">Tạm tính bánh:</span>
+                <strong id="pos-subtotal-val" class="pos-sum-val">0 đ</strong>
               </div>
               <div class="pos-summary-line">
-                <span>Giảm giá / Phí ship:</span>
-                <span id="pos-adj-val">0 đ</span>
+                <span class="pos-sum-label">Giảm giá / Phí ship:</span>
+                <span id="pos-adj-val" class="pos-sum-val">0 đ</span>
               </div>
               <div class="pos-summary-total">
-                <span>TỔNG CỘNG THANH TOÁN:</span>
-                <strong id="pos-total-val">0 đ</strong>
+                <span class="pos-total-title">Tổng thanh toán:</span>
+                <strong id="pos-total-val" class="pos-total-number">0 đ</strong>
               </div>
               <div class="pos-profit-hint" id="pos-profit-val">
-                Giá vốn nguyên liệu: 0 đ • Lãi gộp: 0 đ
+                <span>Vốn NL: <strong>0 đ</strong></span> • <span>Lãi gộp: <strong>0 đ</strong></span>
               </div>
             </div>
 
             <div class="pos-action-buttons">
-              <button class="btn btn-primary btn-lg btn-block" onclick="submitPosOrder(true)">
+              <button class="btn btn-primary btn-lg btn-block pos-btn-print" onclick="submitPosOrder(true)">
                 🖨️ Lưu Đơn &amp; In Bill Giấy Ngay
               </button>
-              <div class="form-row" style="margin-top: 8px;">
+              <div class="pos-btn-sub-row">
                 <button class="btn btn-secondary flex-1" onclick="submitPosOrder(false)">
                   💾 Chỉ lưu đơn (Không in)
                 </button>

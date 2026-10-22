@@ -1228,12 +1228,12 @@ function renderPosTab() {
             </div>
           </td>
           <td class="pos-cell-controls">
-            <div class="pos-controls-top">
-              <div class="pos-ctrl-box">
-                <span class="pos-ctrl-label">Giá (đ)</span>
+            <div class="pos-controls-bar">
+              <div class="pos-ctrl-box pos-ctrl-price">
+                <span class="pos-ctrl-label">Đơn giá</span>
                 <input type="number" class="pos-price-input" value="${unitPrice}" min="0" step="1000" oninput="updatePosSummary()" />
               </div>
-              <div class="pos-ctrl-box">
+              <div class="pos-ctrl-box pos-ctrl-qty">
                 <span class="pos-ctrl-label">Số lượng</span>
                 <div class="pos-qty-box">
                   <button type="button" class="pos-qty-btn" onclick="stepPosQty(event, this, -1)">−</button>
@@ -1241,10 +1241,10 @@ function renderPosTab() {
                   <button type="button" class="pos-qty-btn" onclick="stepPosQty(event, this, 1)">+</button>
                 </div>
               </div>
-            </div>
-            <div class="pos-controls-bottom">
-              <span class="pos-total-label">Thành tiền:</span>
-              <strong class="pos-line-total">0 đ</strong>
+              <div class="pos-ctrl-box pos-ctrl-total">
+                <span class="pos-ctrl-label">Thành tiền</span>
+                <strong class="pos-line-total">0 đ</strong>
+              </div>
             </div>
           </td>
         </tr>
@@ -1328,12 +1328,12 @@ function addCustomPosRow() {
       </div>
     </td>
     <td class="pos-cell-controls">
-      <div class="pos-controls-top">
-        <div class="pos-ctrl-box">
-          <span class="pos-ctrl-label">Giá (đ)</span>
+      <div class="pos-controls-bar">
+        <div class="pos-ctrl-box pos-ctrl-price">
+          <span class="pos-ctrl-label">Đơn giá</span>
           <input type="number" class="pos-price-input" value="15000" min="0" step="1000" oninput="updatePosSummary()" />
         </div>
-        <div class="pos-ctrl-box">
+        <div class="pos-ctrl-box pos-ctrl-qty">
           <span class="pos-ctrl-label">Số lượng</span>
           <div class="pos-qty-box">
             <button type="button" class="pos-qty-btn" onclick="stepPosQty(event, this, -1)">−</button>
@@ -1341,10 +1341,10 @@ function addCustomPosRow() {
             <button type="button" class="pos-qty-btn" onclick="stepPosQty(event, this, 1)">+</button>
           </div>
         </div>
-      </div>
-      <div class="pos-controls-bottom">
-        <span class="pos-total-label">Thành tiền:</span>
-        <strong class="pos-line-total">15.000 đ</strong>
+        <div class="pos-ctrl-box pos-ctrl-total">
+          <span class="pos-ctrl-label">Thành tiền</span>
+          <strong class="pos-line-total">15.000 đ</strong>
+        </div>
       </div>
     </td>
   `;
@@ -1417,18 +1417,20 @@ function updatePosSummary() {
 
   const previewEl = document.getElementById("pos-selected-items-text");
   if (items.length === 0) {
-    previewEl.innerHTML = `<span class="muted">👉 Hãy bấm vào bánh khách mua ở bảng bên trái</span>`;
+    previewEl.innerHTML = `<span class="muted" style="font-size:12.5px;">👉 Hãy bấm chọn bánh ở danh sách bên trái</span>`;
   } else {
-    previewEl.innerHTML =
-      `<strong>Đã chọn (${items.length} loại):</strong> ` +
-      items.map((it) => `${formatNum(it.qty)} × ${escapeHtml(it.name)}`).join(", ");
+    previewEl.innerHTML = `
+      <div class="pos-chips-preview">
+        ${items.map((it) => `<span class="pos-chip-pill">🧁 <strong>${formatNum(it.qty)}</strong> × ${escapeHtml(it.name)} (${formatVND(it.line_total)})</span>`).join("")}
+      </div>
+    `;
   }
 
   document.getElementById("pos-subtotal-val").textContent = formatVND(subtotal);
   const adj = shipping - discount;
   document.getElementById("pos-adj-val").textContent = (adj >= 0 ? "+" : "") + formatVND(adj);
   document.getElementById("pos-total-val").textContent = formatVND(grandTotal);
-  document.getElementById("pos-profit-val").textContent = `Giá vốn NL: ${formatVND(totalCost)} • Lãi gộp đơn này: ${formatVND(profit)}`;
+  document.getElementById("pos-profit-val").innerHTML = `<span>Vốn NL: <strong>${formatVND(totalCost)}</strong></span> • <span>Lãi gộp: <strong class="text-green">${formatVND(profit)}</strong></span>`;
 }
 
 function resetPosForm() {
@@ -1683,71 +1685,103 @@ function buildReceiptHTML(order) {
   const rowsHtml = (order.items || [])
     .map(
       (it) => `
-    <tr>
-      <td>
-        <div><strong>${escapeHtml(it.name)}</strong></div>
-        <div style="font-size:11.5px;">${formatNum(it.qty)} ${escapeHtml(it.unit || "")} × ${Number(it.unit_price).toLocaleString("vi-VN")}</div>
+    <tr class="rcp-item-tr">
+      <td class="rcp-td-name">
+        <div class="rcp-cake-name">${escapeHtml(it.name)}</div>
+        <div class="rcp-cake-calc">${formatNum(it.qty)} ${escapeHtml(it.unit || "cái")} × ${Number(it.unit_price).toLocaleString("vi-VN")} đ</div>
       </td>
-      <td style="text-align:right; font-weight:700;">${Number(it.line_total).toLocaleString("vi-VN")}</td>
+      <td class="rcp-td-total">
+        ${Number(it.line_total).toLocaleString("vi-VN")} đ
+      </td>
     </tr>
   `
     )
     .join("");
 
   return `
-    <div class="rcp-header">
-      <img src="/logo.jpg" alt="MỀM BARKERY" class="rcp-logo" />
-      <div class="rcp-shop-name">${escapeHtml(shopName)}</div>
-      ${shopAddress ? `<div style="font-size:12px; margin-top:2px;">${escapeHtml(shopAddress)}</div>` : ""}
-      ${shopPhone ? `<div style="font-size:12px;">ĐT: ${escapeHtml(shopPhone)}</div>` : ""}
-    </div>
-
-    <div class="rcp-title">HÓA ĐƠN BÁN HÀNG</div>
-
-    <div class="rcp-meta">
-      <div><strong>Số Bill:</strong> ${escapeHtml(order.bill_code)}</div>
-      <div><strong>Ngày giờ:</strong> ${escapeHtml(order.created_at)}</div>
-      <div><strong>Khách hàng:</strong> ${escapeHtml(order.customer_name || "Khách lẻ")}</div>
-      ${order.customer_phone ? `<div><strong>SĐT khách:</strong> ${escapeHtml(order.customer_phone)}</div>` : ""}
-      ${order.customer_note ? `<div><strong>Ghi chú:</strong> ${escapeHtml(order.customer_note)}</div>` : ""}
-      <div><strong>Thanh toán:</strong> ${escapeHtml(order.payment_method || "Tiền mặt")}</div>
-    </div>
-
-    <table class="rcp-table">
-      <thead>
-        <tr>
-          <th>Mặt hàng (SL × Đơn giá)</th>
-          <th style="text-align:right;">Thành tiền</th>
-        </tr>
-      </thead>
-      <tbody>
-        ${rowsHtml}
-      </tbody>
-    </table>
-
-    <div class="rcp-totals">
-      <div class="rcp-row">
-        <span>Tạm tính:</span>
-        <span>${formatVND(order.subtotal)}</span>
+    <div class="rcp-receipt-wrapper">
+      <div class="rcp-header">
+        <img src="/logo.jpg" alt="MỀM BARKERY" class="rcp-logo" />
+        <div class="rcp-shop-name">${escapeHtml(shopName)}</div>
+        ${shopAddress ? `<div class="rcp-shop-info">${escapeHtml(shopAddress)}</div>` : ""}
+        ${shopPhone ? `<div class="rcp-shop-info">Hotline: ${escapeHtml(shopPhone)}</div>` : ""}
       </div>
-      ${
-        order.discount > 0
-          ? `<div class="rcp-row"><span>Giảm giá:</span><span>-${formatVND(order.discount)}</span></div>`
-          : ""
-      }
-      ${
-        order.shipping_fee > 0
-          ? `<div class="rcp-row"><span>Phí giao hàng:</span><span>+${formatVND(order.shipping_fee)}</span></div>`
-          : ""
-      }
-      <div class="rcp-row rcp-grand">
-        <span>TỔNG CỘNG:</span>
-        <span>${formatVND(order.total_amount)}</span>
-      </div>
-    </div>
 
-    <div class="rcp-footer">
-      ${escapeHtml(footer)}
+      <div class="rcp-line-dashed"></div>
+
+      <div class="rcp-title-box">
+        <div class="rcp-title">HÓA ĐƠN BÁN HÀNG</div>
+        <div class="rcp-bill-code">Số: <strong>${escapeHtml(order.bill_code)}</strong></div>
+      </div>
+
+      <div class="rcp-meta-grid">
+        <div class="rcp-meta-row">
+          <span class="rcp-meta-k">Thời gian:</span>
+          <span class="rcp-meta-v">${escapeHtml(order.created_at)}</span>
+        </div>
+        <div class="rcp-meta-row">
+          <span class="rcp-meta-k">Khách hàng:</span>
+          <strong class="rcp-meta-v">${escapeHtml(order.customer_name || "Khách lẻ")}</strong>
+        </div>
+        ${
+          order.customer_phone
+            ? `<div class="rcp-meta-row"><span class="rcp-meta-k">Điện thoại:</span><span class="rcp-meta-v">${escapeHtml(order.customer_phone)}</span></div>`
+            : ""
+        }
+        <div class="rcp-meta-row">
+          <span class="rcp-meta-k">Thanh toán:</span>
+          <span class="rcp-meta-v">${escapeHtml(order.payment_method || "Tiền mặt")}</span>
+        </div>
+        ${
+          order.customer_note
+            ? `<div class="rcp-meta-note"><span class="rcp-meta-k">Ghi chú:</span> <span class="rcp-meta-v">${escapeHtml(order.customer_note)}</span></div>`
+            : ""
+        }
+      </div>
+
+      <div class="rcp-line-solid"></div>
+
+      <table class="rcp-table">
+        <thead>
+          <tr>
+            <th class="rcp-th-name">Mặt hàng &amp; SL</th>
+            <th class="rcp-th-total">Thành tiền</th>
+          </tr>
+        </thead>
+        <tbody>
+          ${rowsHtml}
+        </tbody>
+      </table>
+
+      <div class="rcp-line-solid"></div>
+
+      <div class="rcp-totals">
+        <div class="rcp-row">
+          <span>Tạm tính tiền bánh:</span>
+          <span>${formatVND(order.subtotal)}</span>
+        </div>
+        ${
+          order.discount > 0
+            ? `<div class="rcp-row rcp-row-disc"><span>Giảm giá:</span><span>−${formatVND(order.discount)}</span></div>`
+            : ""
+        }
+        ${
+          order.shipping_fee > 0
+            ? `<div class="rcp-row"><span>Phí giao hàng:</span><span>+${formatVND(order.shipping_fee)}</span></div>`
+            : ""
+        }
+        <div class="rcp-row rcp-grand">
+          <span class="rcp-grand-title">TỔNG CỘNG:</span>
+          <span class="rcp-grand-price">${formatVND(order.total_amount)}</span>
+        </div>
+      </div>
+
+      <div class="rcp-line-dashed"></div>
+
+      <div class="rcp-footer">
+        <div class="rcp-footer-msg">${escapeHtml(footer)}</div>
+        <div class="rcp-sub-bye">Hân hạnh được phục vụ quý khách!</div>
+      </div>
     </div>
   `;
 }
