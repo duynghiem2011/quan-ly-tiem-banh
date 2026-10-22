@@ -104,6 +104,42 @@ function showToast(msg, isError = false) {
 
 let IS_VERCEL_STATIC = false;
 const LOCAL_STORAGE_KEY = "BAKERY_APP_STATE_V1";
+const CLOUD_URL_STORAGE_KEY = "BAKERY_CLOUD_DB_URL_V1";
+const DEFAULT_CLOUD_DB_URL = ""; // Có thể điền cố định link Firebase Realtime DB tại đây
+
+function normalizeCloudUrl(raw) {
+  let u = String(raw || "").trim();
+  if (!u) return "";
+  u = u.replace(/\/+$/, "");
+  u = u.replace(/\/bakery_state\.json$/i, "");
+  u = u.replace(/\/\.json$/i, "");
+  if (u && !/^https?:\/\//i.test(u)) {
+    u = "https://" + u;
+  }
+  return u;
+}
+
+function getCloudDbUrl() {
+  return normalizeCloudUrl(localStorage.getItem(CLOUD_URL_STORAGE_KEY) || DEFAULT_CLOUD_DB_URL || "");
+}
+
+function initCloudFromUrlParam() {
+  try {
+    const params = new URLSearchParams(window.location.search);
+    const cloudParam = params.get("cloud");
+    if (cloudParam) {
+      const clean = normalizeCloudUrl(cloudParam);
+      if (clean) {
+        localStorage.setItem(CLOUD_URL_STORAGE_KEY, clean);
+      }
+      params.delete("cloud");
+      const newQuery = params.toString();
+      const newUrl = window.location.pathname + (newQuery ? `?${newQuery}` : "") + window.location.hash;
+      window.history.replaceState({}, "", newUrl);
+    }
+  } catch (e) {}
+}
+initCloudFromUrlParam();
 
 function nowStr() {
   const d = new Date();
@@ -239,16 +275,66 @@ async function getLocalVercelState() {
 }
 
 function saveLocalVercelState(st) {
+  st.sync_updated_at = Date.now();
+  st.sync_time_str = nowStr();
   recomputeRecipesInState(st);
   localStorage.setItem(LOCAL_STORAGE_KEY, JSON.stringify(st));
 }
 
+async function fetchStateFromCloud(cloudUrl) {
+  const u = normalizeCloudUrl(cloudUrl || getCloudDbUrl());
+  if (!u) return null;
+  const res = await fetch(`${u}/bakery_state.json?t=${Date.now()}`, { cache: "no-store" });
+  if (!res.ok) {
+    throw new Error(`Cloud trả về lỗi HTTP ${res.status}. Kiểm tra lại link hoặc chế độ Test Mode trên Firebase.`);
+  }
+  const data = await res.json();
+  if (data && typeof data === "object" && Array.isArray(data.ingredients)) {
+    const computed = recomputeRecipesInState(data);
+    localStorage.setItem(LOCAL_STORAGE_KEY, JSON.stringify(computed));
+    return computed;
+  }
+  // If Cloud DB is empty (first time), seed it with current local state
+  const localSeed = await getLocalVercelState();
+  await pushStateToCloud(localSeed, u);
+  return localSeed;
+}
+
+async function pushStateToCloud(st, cloudUrl) {
+  const u = normalizeCloudUrl(cloudUrl || getCloudDbUrl());
+  if (!u || !st) return;
+  st.sync_updated_at = Date.now();
+  st.sync_time_str = nowStr();
+  recomputeRecipesInState(st);
+  localStorage.setItem(LOCAL_STORAGE_KEY, JSON.stringify(st));
+  const res = await fetch(`${u}/bakery_state.json`, {
+    method: "PUT",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(st)
+  });
+  if (!res.ok) {
+    throw new Error(`Không thể lưu lên Cloud (HTTP ${res.status}). Hãy bật Rules .read/.write = true trên Firebase.`);
+  }
+}
+
 async function apiGet(url) {
+  const cloudUrl = getCloudDbUrl();
+  if (cloudUrl) {
+    try {
+      const cloudData = await fetchStateFromCloud(cloudUrl);
+      if (cloudData) return cloudData;
+    } catch (err) {
+      console.warn("Cloud sync read warning:", err);
+    }
+  }
+
   if (!IS_VERCEL_STATIC) {
     try {
       const res = await fetch(url);
       if (res.ok && res.headers.get("content-type")?.includes("application/json")) {
-        return await res.json();
+        const serverData = await res.json();
+        localStorage.setItem(LOCAL_STORAGE_KEY, JSON.stringify(serverData));
+        return serverData;
       }
       IS_VERCEL_STATIC = true;
     } catch (e) {
@@ -259,6 +345,25 @@ async function apiGet(url) {
 }
 
 async function apiPost(url, payload) {
+  const cloudUrl = getCloudDbUrl();
+  if (cloudUrl) {
+    try {
+      await fetchStateFromCloud(cloudUrl);
+    } catch (e) {}
+    const result = await handleVercelLocalPost(url, payload);
+    const updatedSt = await getLocalVercelState();
+    await pushStateToCloud(updatedSt, cloudUrl);
+    // Also mirror to local server if running locally
+    if (!IS_VERCEL_STATIC) {
+      fetch(url, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(payload)
+      }).catch(() => {});
+    }
+    return result;
+  }
+
   if (!IS_VERCEL_STATIC) {
     try {
       const res = await fetch(url, {
@@ -1713,28 +1818,39 @@ function renderIngredients() {
         subUnitPrice = `<div class="muted" style="font-size:11.5px; white-space:nowrap;">(= <strong>${formatNum(i.cost_per_unit / 1000)} đ / 1ml</strong>)</div>`;
       }
 
+      const minStockNote = i.min_stock > 0 ? `<span class="muted" style="font-size:11.5px;">• Báo khi &lt; ${formatNum(i.min_stock)} ${escapeHtml(i.unit)}</span>` : "";
+      const stockSubText =
+        uLower === "kg"
+          ? `<div class="muted" style="font-size:11.5px; margin-top:2px;">(= ${formatNum(i.stock * 1000)} g)</div>`
+          : uLower === "lít" || uLower === "lit"
+          ? `<div class="muted" style="font-size:11.5px; margin-top:2px;">(= ${formatNum(i.stock * 1000)} ml)</div>`
+          : "";
+
       return `
       <tr>
-        <td data-label="Tên nguyên liệu" class="card-cell-header">
-          <strong>${escapeHtml(i.name)}</strong>
+        <td data-label="Nguyên liệu &amp; Phân loại" class="card-cell-header">
+          <div style="font-weight:700; font-size:14.5px; color:var(--text);">${escapeHtml(i.name)}</div>
+          <div style="display:flex; align-items:center; gap:6px; margin-top:3px; flex-wrap:wrap;">
+            <span class="recipe-cat" style="margin-top:0;">${escapeHtml(i.category || "Chung")}</span>
+            ${minStockNote}
+          </div>
         </td>
-        <td data-label="Phân loại" class="nowrap-cell"><span class="recipe-cat" style="margin-top:0;">${escapeHtml(i.category || "Chung")}</span></td>
         <td data-label="Tồn kho hiện tại" class="text-right nowrap-cell">
           <span class="stock-pill ${statusClass}">
-            ${formatDualStock(i.stock, i.unit)} (${statusLabel})
+            ${formatNum(i.stock)} ${escapeHtml(i.unit)} (${statusLabel})
           </span>
+          ${stockSubText}
         </td>
-        <td data-label="Mức báo sắp hết" class="text-right muted nowrap-cell">${formatDualStock(i.min_stock, i.unit)}</td>
-        <td data-label="Giá vốn" class="text-right nowrap-cell">
-          <strong>${formatVND(i.cost_per_unit)}</strong> / ${escapeHtml(i.unit)}
+        <td data-label="Giá vốn &amp; Trị giá tồn" class="text-right nowrap-cell">
+          <div><strong>${formatVND(i.cost_per_unit)}</strong> <span class="muted" style="font-size:11.5px;">/${escapeHtml(i.unit)}</span></div>
+          <div class="muted" style="font-size:11.5px; margin-top:2px;">Trị giá: <strong class="text-amber">${formatVND(totalVal)}</strong></div>
           ${subUnitPrice}
         </td>
-        <td data-label="Giá trị tồn" class="text-right nowrap-cell"><strong>${formatVND(totalVal)}</strong></td>
         <td data-label="Thao tác" class="text-right card-cell-actions nowrap-cell">
           <div class="action-btn-group">
-            <button type="button" class="btn btn-sm btn-primary" onclick="openRestockModal(${i.id})">+ Nhập thêm</button>
-            <button type="button" class="btn btn-sm btn-outline" onclick="openIngredientModal(${i.id})">Sửa</button>
-            <button type="button" class="btn btn-sm btn-danger-ghost" onclick="deleteIngredient(${i.id})">Xoá</button>
+            <button type="button" class="btn btn-xs btn-primary" onclick="openRestockModal(${i.id})">+ Nhập</button>
+            <button type="button" class="btn btn-xs btn-outline" onclick="openIngredientModal(${i.id})">Sửa</button>
+            <button type="button" class="btn btn-xs btn-danger-ghost" onclick="deleteIngredient(${i.id})">Xoá</button>
           </div>
         </td>
       </tr>
@@ -2620,19 +2736,187 @@ function closeModal(id) {
   document.getElementById(id).classList.add("hidden");
 }
 
+function updateCloudStatusBadges() {
+  const cloudUrl = getCloudDbUrl();
+  const isConnected = Boolean(cloudUrl);
+
+  const sidebarTitle = document.getElementById("sidebar-sync-title");
+  if (sidebarTitle) {
+    sidebarTitle.textContent = isConnected ? "☁️ Đã bật Cloud (Live)" : "☁️ Đồng bộ Máy tính & ĐT";
+  }
+  const sidebarHint = document.getElementById("sidebar-sync-hint");
+  if (sidebarHint) {
+    sidebarHint.textContent = isConnected ? "Dữ liệu đang đồng bộ realtime" : "Bấm cài đặt Cloud / Quét QR";
+  }
+
+  const mobileBtn = document.getElementById("mobile-cloud-btn");
+  if (mobileBtn) {
+    mobileBtn.textContent = isConnected ? "☁️ Đang đồng bộ" : "☁️ Đồng bộ";
+    mobileBtn.classList.toggle("btn-primary", isConnected);
+    mobileBtn.classList.toggle("btn-outline", !isConnected);
+  }
+
+  const dashBtn = document.getElementById("dashboard-cloud-btn");
+  if (dashBtn) {
+    dashBtn.textContent = isConnected ? "☁️ Cloud: Đang đồng bộ" : "☁️ Đồng bộ Máy tính & ĐT";
+    dashBtn.classList.toggle("btn-secondary", isConnected);
+  }
+
+  const modalBadge = document.getElementById("cloud-sync-status-badge");
+  if (modalBadge) {
+    if (isConnected) {
+      modalBadge.className = "stock-pill stock-ok";
+      modalBadge.textContent = "✅ Đang kết nối Cloud";
+    } else {
+      modalBadge.className = "stock-pill stock-low";
+      modalBadge.textContent = "Chưa kết nối Cloud";
+    }
+  }
+
+  const inputEl = document.getElementById("cloud-db-url-input");
+  if (inputEl && document.activeElement !== inputEl) {
+    inputEl.value = cloudUrl;
+  }
+}
+
 function openMobileModal() {
-  const url = STATE.server_info?.url || window.location.origin;
-  document.getElementById("mobile-url-text").textContent = url;
+  updateCloudStatusBadges();
+  const cloudUrl = getCloudDbUrl();
+  let baseOrigin = STATE.server_info?.url || window.location.origin;
+  if (window.location.origin && !window.location.origin.includes("localhost") && !window.location.origin.includes("127.0.0.1")) {
+    baseOrigin = window.location.origin;
+  }
+  let finalMobileUrl = baseOrigin;
+  if (cloudUrl) {
+    finalMobileUrl += (finalMobileUrl.includes("?") ? "&" : "?") + `cloud=${encodeURIComponent(cloudUrl)}`;
+  }
+
+  document.getElementById("mobile-url-text").textContent = finalMobileUrl;
   const qrImg = document.getElementById("mobile-qr-img");
-  qrImg.src = `https://api.qrserver.com/v1/create-qr-code/?size=200x200&data=${encodeURIComponent(url)}`;
+  qrImg.src = `https://api.qrserver.com/v1/create-qr-code/?size=200x200&data=${encodeURIComponent(finalMobileUrl)}`;
   document.getElementById("modal-mobile").classList.remove("hidden");
 }
 
 function copyMobileUrl() {
   const url = document.getElementById("mobile-url-text").textContent;
   navigator.clipboard?.writeText(url);
-  showToast("📋 Đã sao chép đường dẫn!");
+  showToast("📋 Đã sao chép link (đã kèm mã Cloud đồng bộ)!");
 }
+
+async function saveAndConnectCloudDb(pushLocalFirst = true) {
+  const raw = document.getElementById("cloud-db-url-input")?.value || "";
+  const clean = normalizeCloudUrl(raw);
+  if (!clean) {
+    return showToast("Vui lòng dán đường dẫn Firebase Realtime Database URL!", true);
+  }
+
+  try {
+    showToast("⏳ Đang kết nối tới Cloud Database...");
+    localStorage.setItem(CLOUD_URL_STORAGE_KEY, clean);
+
+    if (pushLocalFirst) {
+      const curLocal = await getLocalVercelState();
+      await pushStateToCloud(curLocal, clean);
+      showToast("🎉 Đã đẩy toàn bộ dữ liệu máy này lên Cloud thành công!");
+    } else {
+      const remoteData = await fetchStateFromCloud(clean);
+      if (remoteData) {
+        showToast("🎉 Đã tải dữ liệu từ Cloud về máy này thành công!");
+      }
+    }
+    updateCloudStatusBadges();
+    await loadState();
+  } catch (err) {
+    showToast("Lỗi kết nối Cloud: " + err.message, true);
+  }
+}
+
+async function disconnectCloudDb() {
+  if (!confirm("Bạn có chắc muốn ngắt kết nối Cloud trên máy này?")) return;
+  localStorage.removeItem(CLOUD_URL_STORAGE_KEY);
+  updateCloudStatusBadges();
+  showToast("Đã ngắt kết nối Cloud. Máy sẽ lưu dữ liệu bộ nhớ cục bộ.");
+  await loadState();
+}
+
+function exportFullBackupJSON() {
+  const backup = {
+    app: "MỀM BARKERY",
+    version: "1.0",
+    exported_at: nowStr(),
+    state: STATE
+  };
+  const jsonStr = JSON.stringify(backup, null, 2);
+  const blob = new Blob([jsonStr], { type: "application/json" });
+  const a = document.createElement("a");
+  a.href = URL.createObjectURL(blob);
+  a.download = `mem-barkery-backup-${new Date().toISOString().slice(0, 10)}.json`;
+  a.click();
+  showToast("📥 Đã tải file Backup dữ liệu!");
+}
+
+async function importFullBackupJSON(event) {
+  const file = event.target?.files?.[0];
+  if (!file) return;
+  try {
+    const text = await file.text();
+    const parsed = JSON.parse(text);
+    const data = parsed.state || parsed;
+    if (!data.ingredients || !Array.isArray(data.ingredients)) {
+      return showToast("File sao lưu không hợp lệ!", true);
+    }
+    if (!confirm(`Xác nhận nhập file backup: ${data.ingredients.length} nguyên liệu, ${(data.recipes || []).length} công thức? Dữ liệu hiện tại sẽ được thay thế.`)) {
+      event.target.value = "";
+      return;
+    }
+    const computed = recomputeRecipesInState(data);
+    localStorage.setItem(LOCAL_STORAGE_KEY, JSON.stringify(computed));
+    const cloudUrl = getCloudDbUrl();
+    if (cloudUrl) {
+      await pushStateToCloud(computed, cloudUrl);
+    }
+    showToast("🎉 Đã nhập dữ liệu từ file backup thành công!");
+    closeModal("modal-mobile");
+    await loadState();
+  } catch (err) {
+    showToast("Lỗi đọc file: " + err.message, true);
+  } finally {
+    event.target.value = "";
+  }
+}
+
+// Background auto-sync (Every 6 seconds check if another device changed data on Cloud)
+setInterval(async () => {
+  const cloudUrl = getCloudDbUrl();
+  if (!cloudUrl) return;
+  // Don't refresh if user is currently typing in an input or a modal is open
+  const activeTag = document.activeElement?.tagName;
+  if (activeTag === "INPUT" || activeTag === "TEXTAREA" || activeTag === "SELECT") return;
+  const anyModalOpen = document.querySelector(".modal-backdrop:not(.hidden)");
+  if (anyModalOpen) return;
+
+  try {
+    const res = await fetch(`${cloudUrl}/bakery_state/sync_updated_at.json?t=${Date.now()}`, { cache: "no-store" });
+    if (res.ok) {
+      const remoteTime = await res.json();
+      const localTime = Number(STATE.sync_updated_at) || 0;
+      if (remoteTime && Number(remoteTime) > localTime) {
+        await loadState();
+      }
+    }
+  } catch (e) {}
+}, 6000);
+
+window.addEventListener("focus", () => {
+  if (getCloudDbUrl()) {
+    loadState();
+  }
+});
+document.addEventListener("visibilitychange", () => {
+  if (document.visibilityState === "visible" && getCloudDbUrl()) {
+    loadState();
+  }
+});
 
 function exportIngredientsCSV() {
   const headers = ["Tên nguyên liệu", "Phân loại", "Đơn vị", "Tồn kho hiện tại", "Mức báo sắp hết", "Đơn giá vốn (VNĐ)", "Tổng giá trị tồn (VNĐ)"];
@@ -2691,5 +2975,6 @@ function escapeHtml(str) {
 }
 
 window.addEventListener("DOMContentLoaded", () => {
+  updateCloudStatusBadges();
   loadState();
 });

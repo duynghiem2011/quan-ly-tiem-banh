@@ -50,9 +50,9 @@
 
       <div class="sidebar-footer">
         <div class="lan-card" onclick="openMobileModal()">
-          <div class="lan-title">📱 Mở trên điện thoại</div>
-          <div class="lan-url" id="sidebar-lan-url">Đang tải IP...</div>
-          <div class="lan-hint">Bấm để lấy mã QR quét Wi-Fi</div>
+          <div class="lan-title" id="sidebar-sync-title">☁️ Đồng bộ Máy tính &amp; ĐT</div>
+          <div class="lan-url" id="sidebar-lan-url">Đang kiểm tra...</div>
+          <div class="lan-hint" id="sidebar-sync-hint">Bấm để cài đặt Cloud / Quét QR</div>
         </div>
       </div>
     </aside>
@@ -65,7 +65,9 @@
           <img src="/logo.jpg" alt="MỀM BARKERY" class="brand-logo-sm" />
           <strong>MỀM BARKERY</strong>
         </div>
-        <button class="btn btn-sm btn-outline" onclick="openMobileModal()">📱 Điện thoại</button>
+        <div style="display:flex; gap:6px; align-items:center;">
+          <button type="button" class="btn btn-sm btn-outline" id="mobile-cloud-btn" onclick="openMobileModal()">☁️ Đồng bộ</button>
+        </div>
       </header>
 
       <!-- TAB 1: DASHBOARD -->
@@ -76,9 +78,10 @@
             <p class="subtitle">Theo dõi doanh thu bán bánh, tồn kho nguyên liệu (kg/gram) và cảnh báo sắp hết</p>
           </div>
           <div class="header-actions">
+            <button class="btn btn-outline" id="dashboard-cloud-btn" onclick="openMobileModal()">☁️ Đồng bộ Máy tính &amp; ĐT</button>
             <button class="btn btn-secondary" onclick="openIngredientModal()">+ Mua nguyên liệu</button>
             <button class="btn btn-outline" onclick="switchTab('bake')">🧁 Làm bánh</button>
-            <button class="btn btn-primary" onclick="switchTab('pos')">🧾 Bán bánh & In Bill</button>
+            <button class="btn btn-primary" onclick="switchTab('pos')">🧾 Bán bánh &amp; In Bill</button>
           </div>
         </div>
 
@@ -418,13 +421,10 @@
             <table class="data-table responsive-card-table ingredients-table">
               <thead>
                 <tr>
-                  <th>Tên nguyên liệu</th>
-                  <th>Phân loại</th>
-                  <th class="text-right">Tồn kho hiện tại (Kg & Gram)</th>
-                  <th class="text-right">Mức báo sắp hết</th>
-                  <th class="text-right">Giá vốn</th>
-                  <th class="text-right">Giá trị tồn</th>
-                  <th class="text-right">Thao tác</th>
+                  <th>Nguyên liệu &amp; Phân loại</th>
+                  <th class="text-right" style="width: 160px; white-space: nowrap;">Tồn kho hiện tại</th>
+                  <th class="text-right" style="width: 170px; white-space: nowrap;">Giá vốn &amp; Trị giá tồn</th>
+                  <th class="text-right" style="width: 175px; white-space: nowrap;">Thao tác</th>
                 </tr>
               </thead>
               <tbody id="ingredients-tbody"></tbody>
@@ -750,21 +750,73 @@
     </div>
   </div>
 
-  <!-- MODAL 4: MOBILE WIFI QR ACCESS -->
+  <!-- MODAL 4: CLOUD SYNC & MOBILE QR ACCESS -->
   <div id="modal-mobile" class="modal-backdrop hidden no-print">
-    <div class="modal modal-sm text-center">
+    <div class="modal">
       <div class="modal-header">
-        <h3>📱 Mở trên Điện thoại / iPad</h3>
+        <h3>☁️ Đồng bộ Đám mây (Máy tính &amp; Điện thoại)</h3>
         <button class="btn-close" onclick="closeModal('modal-mobile')">✕</button>
       </div>
       <div class="modal-body">
-        <p class="muted mb-12">Đảm bảo Điện thoại và máy Mac đang kết nối <strong>cùng 1 mạng Wi-Fi</strong>, sau đó mở Camera quét mã QR hoặc nhập đường dẫn dưới đây vào Safari / Chrome:</p>
-        <div class="qr-box">
-          <img id="mobile-qr-img" alt="QR Code kết nối" width="200" height="200" />
+        <div class="cost-calc-box" style="margin-top:0; margin-bottom:14px;">
+          <div style="display:flex; justify-content:space-between; align-items:center; gap:8px; flex-wrap:wrap; margin-bottom:8px;">
+            <strong style="font-size:14px;">1. Kết nối Cloud Database miễn phí (Firebase Realtime DB)</strong>
+            <span id="cloud-sync-status-badge" class="stock-pill stock-low">Chưa kết nối Cloud</span>
+          </div>
+          <p class="muted" style="font-size:12.5px; margin-bottom:8px;">
+            Dán đường dẫn <strong>Firebase Realtime Database URL</strong> vào ô bên dưới để Máy tính và Điện thoại tự động đồng bộ tức thì mọi lúc mọi nơi (cả 4G &amp; Wi-Fi):
+          </p>
+          <div class="form-group" style="margin-bottom:8px;">
+            <input
+              type="url"
+              id="cloud-db-url-input"
+              class="form-control"
+              placeholder="VD: https://mem-barkery-default-rtdb.asia-southeast1.firebasedatabase.app"
+            />
+          </div>
+          <div style="display:flex; gap:8px; flex-wrap:wrap;">
+            <button type="button" class="btn btn-sm btn-primary" onclick="saveAndConnectCloudDb(true)">
+              ☁️ Lưu &amp; Đẩy dữ liệu máy này lên Cloud
+            </button>
+            <button type="button" class="btn btn-sm btn-secondary" onclick="saveAndConnectCloudDb(false)">
+              🔄 Kết nối &amp; Tải dữ liệu từ Cloud về
+            </button>
+            <button type="button" class="btn btn-sm btn-danger-ghost" onclick="disconnectCloudDb()">
+              Ngắt Cloud
+            </button>
+          </div>
+          <details style="margin-top:10px; font-size:12.5px; color:var(--secondary);">
+            <summary style="cursor:pointer; font-weight:700;">💡 Hướng dẫn lấy link Firebase miễn phí trong 1 phút (Bấm để xem)</summary>
+            <ol style="padding-left:18px; margin-top:6px; line-height:1.55; color:var(--text);">
+              <li>Truy cập <a href="https://console.firebase.google.com/" target="_blank" rel="noopener">console.firebase.google.com</a> (đăng nhập Gmail) → bấm <strong>Create a project</strong> (đặt tên <code>mem-barkery</code>).</li>
+              <li>Ở menu trái chọn <strong>Build → Realtime Database</strong> → bấm <strong>Create Database</strong>.</li>
+              <li>Chọn vị trí Singapore/US → chọn <strong>Start in test mode (Chế độ thử nghiệm)</strong> → bấm <strong>Enable</strong>.</li>
+              <li>Copy đường link dạng <code>https://...-default-rtdb....firebasedatabase.app</code> dán vào ô trên (hoặc gửi cho AI để gắn cố định vào web).</li>
+            </ol>
+          </details>
         </div>
-        <div class="url-copy-box">
-          <code id="mobile-url-text">http://192.168.1.x:8080</code>
-          <button class="btn btn-sm btn-secondary" onclick="copyMobileUrl()">Sao chép</button>
+
+        <div class="text-center" style="border-top:1px dashed var(--border); padding-top:12px;">
+          <strong style="font-size:13.5px; display:block; margin-bottom:4px;">2. Quét mã QR mở trên Điện thoại (Tự kèm link Cloud)</strong>
+          <p class="muted mb-12" style="font-size:12px;">Khi đã lưu link Cloud ở trên, dùng Camera điện thoại quét mã QR này sẽ tự động mở web và nối sẵn vào cùng Cloud Database:</p>
+          <div class="qr-box">
+            <img id="mobile-qr-img" alt="QR Code kết nối" width="170" height="170" />
+          </div>
+          <div class="url-copy-box">
+            <code id="mobile-url-text" style="word-break:break-all; font-size:12px;">http://192.168.1.x:8080</code>
+            <button type="button" class="btn btn-sm btn-secondary" onclick="copyMobileUrl()">📋 Sao chép link</button>
+          </div>
+        </div>
+
+        <div style="border-top:1px dashed var(--border); padding-top:12px; margin-top:12px; display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:8px;">
+          <span class="muted" style="font-size:12.5px;">📦 Sao lưu / Chuyển dữ liệu thủ công qua file:</span>
+          <div style="display:flex; gap:8px; flex-wrap:wrap;">
+            <button type="button" class="btn btn-xs btn-outline" onclick="exportFullBackupJSON()">📥 Tải file Backup (.json)</button>
+            <label class="btn btn-xs btn-secondary" style="margin:0; cursor:pointer;">
+              📤 Nhập file Backup (.json)
+              <input type="file" accept=".json,application/json" style="display:none;" onchange="importFullBackupJSON(event)" />
+            </label>
+          </div>
         </div>
       </div>
     </div>
