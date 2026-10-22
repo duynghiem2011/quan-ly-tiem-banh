@@ -105,7 +105,7 @@ function showToast(msg, isError = false) {
 let IS_VERCEL_STATIC = false;
 const LOCAL_STORAGE_KEY = "BAKERY_APP_STATE_V1";
 const CLOUD_URL_STORAGE_KEY = "BAKERY_CLOUD_DB_URL_V1";
-const DEFAULT_CLOUD_DB_URL = ""; // Có thể điền cố định link Firebase Realtime DB tại đây
+const DEFAULT_CLOUD_DB_URL = "https://membakery-c7285-default-rtdb.asia-southeast1.firebasedatabase.app";
 
 function normalizeCloudUrl(raw) {
   let u = String(raw || "").trim();
