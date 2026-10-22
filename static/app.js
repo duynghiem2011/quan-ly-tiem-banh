@@ -1210,8 +1210,8 @@ function renderPosTab() {
         const pillClass = remaining > 0 ? "has-cake" : "no-cake";
 
         return `
-        <tr class="pos-item-row" onclick="togglePosRow(event, this)" data-recipe-id="${r.id}" data-name="${escapeHtml(r.name)}" data-unit="${escapeHtml(r.yield_unit)}" data-unit-cost="${unitCost}">
-          <td class="pos-cell-main">
+        <div class="pos-item-row" onclick="togglePosRow(event, this)" data-recipe-id="${r.id}" data-name="${escapeHtml(r.name)}" data-unit="${escapeHtml(r.yield_unit)}" data-unit-cost="${unitCost}">
+          <div class="pos-cell-main">
             <div class="pos-cake-cell">
               ${imgHtml}
               <div class="pos-cake-info">
@@ -1226,8 +1226,8 @@ function renderPosTab() {
                 </div>
               </div>
             </div>
-          </td>
-          <td class="pos-cell-controls">
+          </div>
+          <div class="pos-cell-controls">
             <div class="pos-controls-bar">
               <div class="pos-ctrl-box pos-ctrl-price">
                 <span class="pos-ctrl-label">Đơn giá</span>
@@ -1246,8 +1246,8 @@ function renderPosTab() {
                 <strong class="pos-line-total">0 đ</strong>
               </div>
             </div>
-          </td>
-        </tr>
+          </div>
+        </div>
       `;
       })
       .join("");
@@ -1279,7 +1279,8 @@ function togglePosRow(event, row) {
 
 function stepPosQty(event, btn, delta) {
   if (event) event.stopPropagation();
-  const row = btn.closest("tr");
+  const row = btn.closest(".pos-item-row");
+  if (!row) return;
   const isSelected = row.classList.contains("selected-row");
   const input = row.querySelector(".pos-qty-input");
   let current = parseFloat(input.value) || 0;
@@ -1301,7 +1302,8 @@ function stepPosQty(event, btn, delta) {
 }
 
 function onPosQtyInput(input) {
-  const row = input.closest("tr");
+  const row = input.closest(".pos-item-row");
+  if (!row) return;
   const val = parseFloat(input.value) || 0;
   if (val > 0) {
     row.classList.add("selected-row");
@@ -1313,21 +1315,21 @@ function onPosQtyInput(input) {
 
 function addCustomPosRow() {
   const tbody = document.getElementById("pos-cakes-tbody");
-  const tr = document.createElement("tr");
+  const tr = document.createElement("div");
   tr.className = "pos-item-row selected-row";
   tr.dataset.recipeId = "";
   tr.dataset.unit = "cái";
   tr.dataset.unitCost = "0";
   tr.setAttribute("onclick", "togglePosRow(event, this)");
   tr.innerHTML = `
-    <td class="pos-cell-main">
+    <div class="pos-cell-main">
       <div style="display:flex; align-items:center; gap:8px; flex-wrap:wrap;">
         <input type="text" class="form-control custom-pos-name" placeholder="Nhập tên món phụ (VD: Nến, Hộp quà...)" oninput="updatePosSummary()" style="padding:6px 10px; font-size:13.5px; flex:1; min-width:140px;" />
         <span class="pos-unit-price-tag">15.000 đ</span>
         <span class="pos-selected-tag">✓ Đã chọn</span>
       </div>
-    </td>
-    <td class="pos-cell-controls">
+    </div>
+    <div class="pos-cell-controls">
       <div class="pos-controls-bar">
         <div class="pos-ctrl-box pos-ctrl-price">
           <span class="pos-ctrl-label">Đơn giá</span>
@@ -1346,7 +1348,7 @@ function addCustomPosRow() {
           <strong class="pos-line-total">15.000 đ</strong>
         </div>
       </div>
-    </td>
+    </div>
   `;
   tbody.appendChild(tr);
   tr.querySelector(".custom-pos-name").focus();

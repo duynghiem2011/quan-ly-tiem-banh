@@ -385,7 +385,7 @@ button, input, select, textarea {
 /* POS LAYOUT (BÁN BÁNH & IN BILL) */
 .pos-layout {
   display: grid;
-  grid-template-columns: 1.32fr 0.88fr;
+  grid-template-columns: minmax(0, 1.4fr) minmax(350px, 420px);
   gap: 18px;
   align-items: start;
 }
@@ -423,21 +423,19 @@ button, input, select, textarea {
   overflow: visible;
 }
 
-.pos-cake-table,
-.pos-cake-table tbody {
+.pos-cake-list {
   display: flex;
   flex-direction: column;
   gap: 8px;
   width: 100%;
 }
 
-.pos-cake-table tr.pos-item-row {
+.pos-item-row {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  flex-wrap: wrap;
-  gap: 8px 12px;
-  padding: 10px 12px;
+  gap: 12px;
+  padding: 10px 14px;
   border: 1.5px solid var(--border);
   border-radius: 12px;
   background-color: #ffffff;
@@ -445,30 +443,26 @@ button, input, select, textarea {
   transition: background-color 0.14s, border-color 0.14s, box-shadow 0.14s;
   user-select: none;
   width: 100%;
+  box-sizing: border-box;
 }
 
-.pos-cake-table tr.pos-item-row:hover {
+.pos-item-row:hover {
   background-color: #f4f8fe;
   border-color: #b7d0ee;
 }
 
-.pos-cake-table tr.selected-row {
+.pos-item-row.selected-row {
   background-color: #e6f1fd !important;
   border-color: var(--primary) !important;
   box-shadow: inset 4px 0 0 var(--primary), 0 2px 8px rgba(86, 123, 176, 0.12);
 }
 
-.pos-cake-table tr.pos-item-row td {
-  border: none !important;
-  padding: 0 !important;
-}
-
-.pos-cake-table tr.pos-item-row td.pos-cell-main {
-  flex: 1 1 200px;
+.pos-cell-main {
+  flex: 1 1 auto;
   min-width: 0;
 }
 
-.pos-cake-table tr.pos-item-row td.pos-cell-controls {
+.pos-cell-controls {
   flex: 0 0 auto;
   display: flex;
   align-items: center;
@@ -549,7 +543,7 @@ button, input, select, textarea {
   flex-shrink: 0;
 }
 
-.pos-cake-table tr.selected-row .pos-selected-tag {
+.pos-item-row.selected-row .pos-selected-tag {
   display: inline-block;
 }
 
@@ -653,7 +647,7 @@ button, input, select, textarea {
   font-size: 13px;
 }
 
-.pos-cake-table tr.selected-row .pos-line-total {
+.pos-item-row.selected-row .pos-line-total {
   color: var(--green);
   font-size: 14px;
   font-weight: 800;
@@ -2324,15 +2318,18 @@ button, input, select, textarea {
     flex: 1 1 auto;
   }
 
-  /* POS Cake Selection Table -> Ultra-Compact Mobile Cards (No horizontal scroll!) */
-  .pos-cake-table tr.pos-item-row {
+  /* POS Cake Selection List -> Ultra-Compact Mobile Cards (No horizontal scroll!) */
+  .pos-item-row {
+    flex-direction: column;
+    align-items: stretch;
     padding: 10px 12px;
     gap: 8px;
   }
-  .pos-cake-table tr.pos-item-row td.pos-cell-main {
+  .pos-cell-main {
     flex: 1 1 100%;
+    width: 100%;
   }
-  .pos-cake-table tr.pos-item-row td.pos-cell-controls {
+  .pos-cell-controls {
     flex: 1 1 100%;
     width: 100%;
     padding-top: 8px !important;
