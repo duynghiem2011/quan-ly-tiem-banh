@@ -2282,7 +2282,7 @@ button, input, select, textarea {
   align-items: center;
   justify-content: space-between;
   gap: 12px;
-  padding: 12px 14px;
+  padding: 10px 14px;
   background: var(--surface);
   border: 1.5px solid var(--border);
   border-radius: var(--radius-sm);
@@ -2308,14 +2308,52 @@ button, input, select, textarea {
   min-width: 0;
 }
 
-.bake-cake-thumb {
+.bake-cake-thumb-wrap {
+  position: relative;
   width: 48px;
   height: 48px;
   border-radius: 10px;
-  object-fit: cover;
+  overflow: hidden;
   border: 1px solid var(--border);
-  flex-shrink: 0;
   background: var(--surface-alt);
+  flex-shrink: 0;
+  cursor: pointer;
+}
+
+.bake-cake-thumb-wrap:hover .thumb-cam-badge {
+  opacity: 1;
+  background: rgba(0, 0, 0, 0.75);
+}
+
+.bake-cake-thumb {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: block;
+}
+
+.bake-thumb-placeholder {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 22px;
+  background: #f8fafc;
+}
+
+.thumb-cam-badge {
+  position: absolute;
+  bottom: 0;
+  left: 0;
+  right: 0;
+  background: rgba(0, 0, 0, 0.6);
+  color: #ffffff;
+  font-size: 9.5px;
+  text-align: center;
+  padding: 1px 0;
+  line-height: 1.2;
+  opacity: 0.85;
+  transition: opacity 0.2s;
+  pointer-events: none;
 }
 
 .bake-cake-texts {
@@ -2324,15 +2362,17 @@ button, input, select, textarea {
 }
 
 .bake-cake-title {
-  font-weight: 700;
-  font-size: 15px;
-  color: var(--text);
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
   display: flex;
   align-items: center;
   gap: 8px;
+  flex-wrap: wrap;
+}
+
+.bake-cake-name-text {
+  font-weight: 700;
+  font-size: 15px;
+  color: var(--text);
+  line-height: 1.3;
 }
 
 .bake-selected-badge {
@@ -2340,48 +2380,137 @@ button, input, select, textarea {
   color: #ffffff;
   font-size: 11px;
   font-weight: 700;
-  padding: 2px 7px;
+  padding: 2px 8px;
   border-radius: 999px;
-  display: inline-block;
+  white-space: nowrap;
 }
 
-.bake-cake-sub {
-  font-size: 12px;
-  color: var(--text-muted);
+.bake-cake-meta-row {
   display: flex;
-  gap: 8px;
+  gap: 6px;
   flex-wrap: wrap;
+  align-items: center;
   margin-top: 3px;
 }
 
-.bake-stepper-wrap {
-  display: flex;
-  flex-direction: column;
-  align-items: flex-end;
-  gap: 4px;
+.bake-meta-pill {
+  font-size: 11.5px;
+  color: var(--text-muted);
+  background: #f1f5f9;
+  padding: 2px 7px;
+  border-radius: 6px;
+  white-space: nowrap;
+}
+
+.bake-meta-pill.has-stock {
+  background: #ecfdf5;
+  color: #047857;
+  font-weight: 600;
+}
+
+.bake-meta-pill.no-stock {
+  background: #fff7ed;
+  color: #c2410c;
+}
+
+.bake-selected-subtext {
+  font-size: 12px;
+  color: #2d8a61;
+  font-weight: 600;
+  margin-top: 4px;
+  line-height: 1.3;
+}
+
+.bake-stepper-compact {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  background: var(--surface-alt);
+  padding: 3px;
+  border-radius: 8px;
+  border: 1px solid var(--border);
   flex-shrink: 0;
 }
 
-.bake-stepper {
+.bake-btn-step,
+.bake-btn-quick,
+.bake-btn-reset {
+  height: 32px;
+  border-radius: 6px;
+  border: 1px solid var(--border);
+  background: #ffffff;
+  font-size: 13px;
+  font-weight: 700;
+  cursor: pointer;
   display: inline-flex;
   align-items: center;
-  gap: 4px;
+  justify-content: center;
+  transition: all 0.15s ease;
+  padding: 0 8px;
+  color: var(--text);
 }
 
-.bake-qty-input {
-  width: 58px;
+.bake-btn-step:hover {
+  background: #f1f5f9;
+  border-color: #cbd5e1;
+}
+
+.bake-btn-step:active {
+  transform: scale(0.96);
+}
+
+.bake-minus {
+  color: #b91c1c;
+  min-width: 28px;
+}
+
+.bake-plus {
+  color: #047857;
+  min-width: 28px;
+}
+
+.bake-compact-input {
+  width: 48px;
+  height: 32px;
   text-align: center;
   font-weight: 800;
-  font-size: 15px;
-  padding: 6px 4px;
+  font-size: 14.5px;
+  padding: 0 2px;
   border: 1px solid var(--border);
-  border-radius: 8px;
+  border-radius: 6px;
   background: #ffffff;
+  color: var(--text);
+  -moz-appearance: textfield;
 }
 
-.bake-quick-btns {
-  display: inline-flex;
-  gap: 4px;
+.bake-compact-input::-webkit-inner-spin-button,
+.bake-compact-input::-webkit-outer-spin-button {
+  -webkit-appearance: none;
+  margin: 0;
+}
+
+.bake-btn-quick {
+  background: #eff6ff;
+  color: #1d4ed8;
+  border-color: #bfdbfe;
+  font-size: 12px;
+  padding: 0 7px;
+}
+
+.bake-btn-quick:hover {
+  background: #dbeafe;
+}
+
+.bake-btn-reset {
+  background: #fee2e2;
+  color: #dc2626;
+  border-color: #fca5a5;
+  padding: 0 7px;
+  font-size: 12px;
+}
+
+.bake-btn-reset:hover {
+  background: #fecaca;
 }
 
 .bake-selected-box {
@@ -2531,26 +2660,292 @@ button, input, select, textarea {
   font-size: 12.5px;
 }
 
+/* Customer Cards Grid */
+.customer-cards-list {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(320px, 1fr));
+  gap: 14px;
+}
+
+.customer-card {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  padding: 14px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.04);
+  transition: transform 0.15s ease, box-shadow 0.15s ease;
+}
+
+.customer-card:hover {
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.08);
+  border-color: #cbd5e1;
+}
+
+.cust-card-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.cust-card-identity {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-width: 0;
+}
+
+.cust-card-avatar {
+  width: 40px;
+  height: 40px;
+  border-radius: 50%;
+  background: #f0fdf4;
+  color: #16a34a;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 20px;
+  border: 1px solid #bbf7d0;
+  flex-shrink: 0;
+}
+
+.cust-card-name {
+  font-size: 15px;
+  font-weight: 700;
+  color: var(--text);
+  line-height: 1.3;
+}
+
+.cust-card-phone {
+  font-size: 12.5px;
+  color: var(--text-muted);
+  margin-top: 2px;
+}
+
+.cust-card-phone a {
+  color: var(--primary);
+  text-decoration: none;
+  font-weight: 600;
+}
+
+.cust-card-act {
+  flex-shrink: 0;
+}
+
+.cust-card-stats {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 6px;
+  background: var(--surface-alt);
+  border-radius: 8px;
+  padding: 8px 10px;
+  border: 1px solid var(--border);
+}
+
+.cust-stat-item {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  text-align: center;
+}
+
+.cust-stat-label {
+  font-size: 11px;
+  color: var(--text-muted);
+  margin-bottom: 2px;
+}
+
+.cust-stat-val {
+  font-size: 13px;
+}
+
+.cust-card-cakes {
+  min-width: 0;
+}
+
+.cust-cakes-label {
+  font-size: 11.5px;
+  color: var(--text-muted);
+  margin-bottom: 5px;
+  font-weight: 600;
+}
+
+.cust-cakes-wrap {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+  max-height: 80px;
+  overflow-y: auto;
+}
+
+.cust-card-footer {
+  border-top: 1px dashed var(--border);
+  padding-top: 8px;
+  margin-top: auto;
+}
+
+/* Ingredients Photo & Cell */
+.ing-cell-wrap {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.ing-thumb-wrap {
+  position: relative;
+  width: 42px;
+  height: 42px;
+  border-radius: 8px;
+  overflow: hidden;
+  border: 1px solid var(--border);
+  background: var(--surface-alt);
+  flex-shrink: 0;
+  cursor: pointer;
+}
+
+.ing-thumb-wrap:hover .thumb-cam-badge {
+  opacity: 1;
+  background: rgba(0, 0, 0, 0.75);
+}
+
+.ing-thumb-img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: block;
+}
+
+.ing-thumb-placeholder {
+  width: 100%;
+  height: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 20px;
+  background: #f8fafc;
+}
+
+.ing-cell-content {
+  min-width: 0;
+  flex: 1;
+}
+
+.ing-name-title {
+  font-weight: 700;
+  font-size: 14.5px;
+  color: var(--text);
+  line-height: 1.3;
+}
+
+.ing-meta-row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-top: 3px;
+  flex-wrap: wrap;
+}
+
+/* Recipe Card Photo Overlay */
+.recipe-card-img-wrap {
+  position: relative;
+  border-radius: 10px;
+  overflow: hidden;
+  flex-shrink: 0;
+  cursor: pointer;
+  background: var(--surface-alt);
+  width: 60px;
+  height: 60px;
+}
+
+.recipe-card-img-wrap .recipe-card-img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: block;
+}
+
+.recipe-card-img-placeholder {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 28px;
+  border: 1px solid var(--border);
+  background: #f8fafc;
+  width: 100%;
+  height: 100%;
+}
+
+.recipe-cam-badge {
+  position: absolute;
+  bottom: 0;
+  left: 0;
+  right: 0;
+  background: rgba(0, 0, 0, 0.65);
+  color: #fff;
+  font-size: 9.5px;
+  text-align: center;
+  padding: 2px 0;
+  opacity: 0.85;
+  transition: opacity 0.2s;
+  pointer-events: none;
+}
+
+.recipe-card-img-wrap:hover .recipe-cam-badge {
+  opacity: 1;
+  background: rgba(0, 0, 0, 0.85);
+}
+
+.recipe-title-text-wrap {
+  min-width: 0;
+  flex: 1;
+}
+
+/* Modal Image Picker */
+.modal-img-picker-row {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  margin-bottom: 14px;
+  padding: 10px 14px;
+  background: var(--surface-alt);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+}
+
+.modal-thumb-preview {
+  width: 56px;
+  height: 56px;
+  border-radius: 10px;
+  border: 1px solid var(--border);
+  background: #ffffff;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 28px;
+  overflow: hidden;
+  flex-shrink: 0;
+}
+
+.modal-thumb-img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: block;
+}
+
+.modal-img-picker-actions {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  flex: 1;
+}
+
 @media (max-width: 768px) {
-  .bake-recipe-row {
-    flex-direction: column;
-    align-items: flex-start;
-    gap: 10px;
-  }
-  .bake-stepper-wrap {
-    width: 100%;
-    align-items: stretch;
-  }
-  .bake-stepper {
-    justify-content: space-between;
-    width: 100%;
-  }
-  .bake-qty-input {
-    flex: 1;
-  }
-  .bake-quick-btns {
-    justify-content: flex-end;
-    margin-top: 4px;
+  .customer-cards-list {
+    grid-template-columns: 1fr;
   }
   .order-filter-inputs {
     flex-direction: column;
@@ -2561,5 +2956,24 @@ button, input, select, textarea {
   }
   .filter-search-wrap {
     width: 100%;
+  }
+}
+
+@media (max-width: 600px) {
+  .bake-recipe-row {
+    flex-wrap: wrap;
+    padding: 10px 12px;
+    gap: 8px;
+  }
+  .bake-cake-info {
+    width: 100%;
+  }
+  .bake-stepper-compact {
+    width: 100%;
+    justify-content: space-between;
+  }
+  .bake-compact-input {
+    flex: 1;
+    max-width: 60px;
   }
 }

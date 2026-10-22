@@ -412,6 +412,7 @@ async function handleVercelLocalPost(path, data) {
       ing.updated_at = now;
       if (Math.abs(diff) > 0.0001) {
         const sign = diff > 0 ? "+" : "";
+        ing.image_url = data.image_url !== undefined ? (data.image_url || "") : (ing.image_url || "");
         st.transactions.unshift({
           id: Date.now(),
           type: "ADJUST",
@@ -436,6 +437,7 @@ async function handleVercelLocalPost(path, data) {
         package_size: pkgSize,
         package_price: pkgPrice,
         cost_per_unit: costPerUnit,
+        image_url: data.image_url || "",
         updated_at: now
       });
       st.transactions.unshift({
@@ -450,6 +452,26 @@ async function handleVercelLocalPost(path, data) {
     }
     saveLocalVercelState(st);
     return { ok: true };
+  }
+
+  if (path === "/api/ingredients/update_image") {
+    const ing = st.ingredients.find((x) => x.id === Number(data.id));
+    if (ing) {
+      ing.image_url = data.image_url || "";
+      ing.updated_at = now;
+      saveLocalVercelState(st);
+    }
+    return { ok: true, image_url: data.image_url };
+  }
+
+  if (path === "/api/recipes/update_image") {
+    const r = st.recipes.find((x) => x.id === Number(data.id));
+    if (r) {
+      r.image_url = data.image_url || "";
+      r.updated_at = now;
+      saveLocalVercelState(st);
+    }
+    return { ok: true, image_url: data.image_url };
   }
 
   if (path === "/api/ingredients/restock") {
@@ -500,6 +522,7 @@ async function handleVercelLocalPost(path, data) {
     }));
     const yieldUnit = data.yield_unit || "bánh";
     const sellingPrice = Number(data.selling_price) || 0;
+    const recipeImg = data.image_url || "";
     if (data.id) {
       const r = st.recipes.find((x) => x.id === Number(data.id));
       if (r) {
@@ -510,6 +533,7 @@ async function handleVercelLocalPost(path, data) {
           yield_unit: yieldUnit,
           cake_weight_gram: Number(data.cake_weight_gram) || 0,
           selling_price: sellingPrice,
+          image_url: recipeImg !== undefined ? (recipeImg || r.image_url || "") : (r.image_url || ""),
           notes: data.notes || "",
           items,
           updated_at: now
@@ -526,6 +550,7 @@ async function handleVercelLocalPost(path, data) {
         yield_unit: yieldUnit,
         cake_weight_gram: Number(data.cake_weight_gram) || 0,
         selling_price: sellingPrice,
+        image_url: recipeImg,
         baked_stock: 0,
         notes: data.notes || "",
         items,
@@ -1007,6 +1032,133 @@ function renderDashboard() {
   } else {
     recentTxContainer.innerHTML = recentTxs.map((tx) => renderTxItemHTML(tx, false)).join("");
   }
+}
+
+function selectAndCompressImage(callback, maxWidth = 360, maxHeight = 360, quality = 0.85) {
+  const input = document.createElement("input");
+  input.type = "file";
+  input.accept = "image/*";
+  input.onchange = (e) => {
+    const file = e.target.files && e.target.files[0];
+    if (!file) return;
+
+    const reader = new FileReader();
+    reader.onload = (re) => {
+      const img = new Image();
+      img.onload = () => {
+        let w = img.width;
+        let h = img.height;
+        if (w > maxWidth || h > maxHeight) {
+          if (w > h) {
+            h = Math.round((h * maxWidth) / w);
+            w = maxWidth;
+          } else {
+            w = Math.round((w * maxHeight) / h);
+            h = maxHeight;
+          }
+        }
+        const canvas = document.createElement("canvas");
+        canvas.width = w;
+        canvas.height = h;
+        const ctx = canvas.getContext("2d");
+        ctx.drawImage(img, 0, 0, w, h);
+        const dataUrl = canvas.toDataURL("image/jpeg", quality);
+        callback(dataUrl);
+      };
+      img.onerror = () => showToast("Không thể tải hình ảnh này.", true);
+      img.src = re.target.result;
+    };
+    reader.readAsDataURL(file);
+  };
+  input.click();
+}
+
+function getIngredientDefaultIcon(i) {
+  const name = String(i?.name || "").toLowerCase();
+  const cat = String(i?.category || "").toLowerCase();
+
+  if (name.includes("trứng") || cat.includes("trứng")) return "🥚";
+  if (name.includes("sữa") || name.includes("whipping") || name.includes("topping") || cat.includes("sữa")) return "🥛";
+  if (name.includes("bột") || cat.includes("bột")) return "🌾";
+  if (name.includes("bơ") || name.includes("cheese") || name.includes("phô mai") || cat.includes("bơ")) return "🧈";
+  if (name.includes("đường") || name.includes("mật ong") || cat.includes("đường")) return "🍯";
+  if (name.includes("men") || name.includes("muối") || name.includes("baking") || cat.includes("men")) return "🧂";
+  if (name.includes("cacao") || name.includes("socola") || name.includes("chocolate") || cat.includes("socola")) return "🍫";
+  if (name.includes("vani") || name.includes("matcha") || name.includes("màu") || cat.includes("hương")) return "🌿";
+  if (name.includes("mứt") || name.includes("nhân") || cat.includes("nhân")) return "🍓";
+  if (name.includes("hạt") || name.includes("hạnh nhân") || cat.includes("hạt")) return "🥜";
+  if (name.includes("xúc xích") || name.includes("chà bông") || cat.includes("mặn")) return "🌭";
+  if (name.includes("dầu") || cat.includes("dầu")) return "🫙";
+  if (name.includes("hộp") || name.includes("túi") || cat.includes("bao bì")) return "📦";
+  return "📦";
+}
+
+async function triggerChangeRecipeImage(recipeId) {
+  const r = (STATE.recipes || []).find((x) => x.id === Number(recipeId));
+  if (!r) return;
+  selectAndCompressImage(async (dataUrl) => {
+    try {
+      await apiPost("/api/recipes/update_image", { id: r.id, image_url: dataUrl });
+      r.image_url = dataUrl;
+      showToast("📸 Đã cập nhật ảnh bánh: " + r.name);
+      await loadState();
+    } catch (err) {
+      showToast(err.message, true);
+    }
+  }, 400, 400, 0.85);
+}
+
+async function triggerChangeIngredientImage(ingId) {
+  const ing = (STATE.ingredients || []).find((x) => x.id === Number(ingId));
+  if (!ing) return;
+  selectAndCompressImage(async (dataUrl) => {
+    try {
+      await apiPost("/api/ingredients/update_image", { id: ing.id, image_url: dataUrl });
+      ing.image_url = dataUrl;
+      showToast("📸 Đã cập nhật ảnh nguyên liệu: " + ing.name);
+      await loadState();
+    } catch (err) {
+      showToast(err.message, true);
+    }
+  }, 280, 280, 0.85);
+}
+
+function triggerSelectRecipeModalImage() {
+  selectAndCompressImage((dataUrl) => {
+    const input = document.getElementById("recipe-image-url");
+    const preview = document.getElementById("recipe-modal-img-preview");
+    if (input) input.value = dataUrl;
+    if (preview) {
+      preview.innerHTML = `<img src="${dataUrl}" class="modal-thumb-img" alt="Ảnh bánh" />`;
+    }
+    showToast("📸 Đã chọn ảnh bánh mới!");
+  }, 400, 400, 0.85);
+}
+
+function clearRecipeModalImage() {
+  const input = document.getElementById("recipe-image-url");
+  const preview = document.getElementById("recipe-modal-img-preview");
+  if (input) input.value = "";
+  if (preview) preview.innerHTML = "🧁";
+}
+
+function triggerSelectIngModalImage() {
+  selectAndCompressImage((dataUrl) => {
+    const input = document.getElementById("ing-image-url");
+    const preview = document.getElementById("ing-modal-img-preview");
+    if (input) input.value = dataUrl;
+    if (preview) {
+      preview.innerHTML = `<img src="${dataUrl}" class="modal-thumb-img" alt="Ảnh nguyên liệu" />`;
+    }
+    showToast("📸 Đã chọn ảnh nguyên liệu mới!");
+  }, 280, 280, 0.85);
+}
+
+function clearIngModalImage() {
+  const input = document.getElementById("ing-image-url");
+  const preview = document.getElementById("ing-modal-img-preview");
+  if (input) input.value = "";
+  if (preview) preview.innerHTML = "🥚";
 }
 
 function getRecipeImageUrl(r) {
@@ -1764,50 +1916,48 @@ function renderBakeTab() {
       const remStock = Number(r.remaining_today !== undefined ? r.remaining_today : r.baked_stock) || 0;
 
       let subYieldInfo = `1 mẻ = ${yieldQty} ${unit}`;
-      if (r.cake_weight_gram > 0) subYieldInfo += ` (${formatNum(r.cake_weight_gram)}g/${unit})`;
+      if (r.cake_weight_gram > 0) subYieldInfo += ` (${formatNum(r.cake_weight_gram)}g)`;
 
       let selectedSubText = "";
       if (isSelected) {
-        selectedSubText = `<div style="font-size:12px; color:#2d8a61; font-weight:700; margin-top:3px;">👉 Đang chọn: ${formatNum(batches)} mẻ (= ${formatNum(totalYield)} ${unit}) • Vốn mẻ: ${formatVND(batches * (r.total_cost || 0))}</div>`;
+        selectedSubText = `<div class="bake-selected-subtext">👉 Đang chọn: <strong>${formatNum(batches)} mẻ</strong> (= ${formatNum(totalYield)} ${unit}) • Vốn mẻ: ${formatVND(batches * (r.total_cost || 0))}</div>`;
       }
 
       return `
       <div class="bake-recipe-row ${isSelected ? "is-selected" : ""}" id="bake-row-${r.id}" data-name="${escapeHtml(r.name.toLowerCase())}">
         <div class="bake-cake-info">
-          ${imgHtml}
+          <div class="bake-cake-thumb-wrap" onclick="triggerChangeRecipeImage(${r.id})" title="Bấm để tải/đổi ảnh bánh">
+            ${imgHtml}
+            <span class="thumb-cam-badge">📷 Đổi ảnh</span>
+          </div>
           <div class="bake-cake-texts">
             <div class="bake-cake-title">
-              <span>${escapeHtml(r.name)}</span>
+              <span class="bake-cake-name-text">${escapeHtml(r.name)}</span>
               ${isSelected ? `<span class="bake-selected-badge">✓ Làm ${formatNum(batches)} mẻ</span>` : ""}
             </div>
-            <div class="bake-cake-sub">
-              <span>📋 ${subYieldInfo}</span>
-              <span>💰 Giá bán: <strong>${formatVND(sellPrice)}</strong></span>
-              <span>📦 Còn trên quầy: <strong>${formatNum(remStock)}</strong> ${unit}</span>
+            <div class="bake-cake-meta-row">
+              <span class="bake-meta-pill">📋 ${subYieldInfo}</span>
+              <span class="bake-meta-pill">💰 ${formatVND(sellPrice)}</span>
+              <span class="bake-meta-pill ${remStock > 0 ? "has-stock" : "no-stock"}">📦 Còn: <strong>${formatNum(remStock)}</strong> ${unit}</span>
             </div>
             ${selectedSubText}
           </div>
         </div>
 
-        <div class="bake-stepper-wrap">
-          <div class="bake-stepper">
-            <button type="button" class="btn-step" onclick="stepBakeQty(${r.id}, -1)" title="Giảm 1 mẻ">−1</button>
-            <input
-              type="number"
-              class="bake-qty-input"
-              min="0"
-              step="0.5"
-              value="${batches > 0 ? batches : 0}"
-              onchange="setBakeQty(${r.id}, this.value)"
-              title="Nhập số mẻ làm"
-            />
-            <button type="button" class="btn-step" onclick="stepBakeQty(${r.id}, 1)" title="Tăng 1 mẻ">+1</button>
-          </div>
-          <div class="bake-quick-btns">
-            <button type="button" class="btn btn-xs btn-outline" onclick="stepBakeQty(${r.id}, 1)">+1 mẻ</button>
-            <button type="button" class="btn btn-xs btn-secondary" onclick="stepBakeQty(${r.id}, 5)">+5 mẻ</button>
-            <button type="button" class="btn btn-xs btn-danger" onclick="setBakeQty(${r.id}, 0)" ${batches <= 0 ? "disabled" : ""}>Về 0</button>
-          </div>
+        <div class="bake-stepper-compact">
+          <button type="button" class="bake-btn-step bake-minus" onclick="stepBakeQty(${r.id}, -1)" title="Giảm 1 mẻ">−</button>
+          <input
+            type="number"
+            class="bake-compact-input"
+            min="0"
+            step="0.5"
+            value="${batches > 0 ? batches : 0}"
+            onchange="setBakeQty(${r.id}, this.value)"
+            title="Nhập số mẻ làm"
+          />
+          <button type="button" class="bake-btn-step bake-plus" onclick="stepBakeQty(${r.id}, 1)" title="Tăng 1 mẻ">+</button>
+          <button type="button" class="bake-btn-quick" onclick="stepBakeQty(${r.id}, 5)" title="Tăng 5 mẻ">+5</button>
+          ${batches > 0 ? `<button type="button" class="bake-btn-reset" onclick="setBakeQty(${r.id}, 0)" title="Xoá chọn">✕</button>` : ""}
         </div>
       </div>
     `;
@@ -2217,13 +2367,25 @@ function renderIngredients() {
           ? `<div class="muted" style="font-size:11.5px; margin-top:2px;">(= ${formatNum(i.stock * 1000)} ml)</div>`
           : "";
 
+      const imgHtml = i.image_url
+        ? `<img src="${escapeHtml(i.image_url)}" class="ing-thumb-img" alt="${escapeHtml(i.name)}" />`
+        : `<div class="ing-thumb-placeholder">${getIngredientDefaultIcon(i)}</div>`;
+
       return `
       <tr>
         <td data-label="Nguyên liệu &amp; Phân loại" class="card-cell-header">
-          <div style="font-weight:700; font-size:14.5px; color:var(--text);">${escapeHtml(i.name)}</div>
-          <div style="display:flex; align-items:center; gap:6px; margin-top:3px; flex-wrap:wrap;">
-            <span class="recipe-cat" style="margin-top:0;">${escapeHtml(i.category || "Chung")}</span>
-            ${minStockNote}
+          <div class="ing-cell-wrap">
+            <div class="ing-thumb-wrap" onclick="triggerChangeIngredientImage(${i.id})" title="Bấm để tải/đổi ảnh nguyên liệu">
+              ${imgHtml}
+              <span class="thumb-cam-badge">📷</span>
+            </div>
+            <div class="ing-cell-content">
+              <div class="ing-name-title">${escapeHtml(i.name)}</div>
+              <div class="ing-meta-row">
+                <span class="recipe-cat" style="margin-top:0;">${escapeHtml(i.category || "Chung")}</span>
+                ${minStockNote}
+              </div>
+            </div>
           </div>
         </td>
         <td data-label="Tồn kho hiện tại" class="text-right nowrap-cell">
@@ -2288,6 +2450,18 @@ function openIngredientModal(id = null) {
     document.getElementById("ing-min-stock").value = ing.min_stock;
     document.getElementById("ing-pkg-size").value = ing.package_size || 1;
     document.getElementById("ing-pkg-price").value = ing.package_price || Math.round(ing.cost_per_unit * (ing.package_size || 1));
+
+    const imgUrl = ing.image_url || "";
+    const imgInput = document.getElementById("ing-image-url");
+    const imgPreview = document.getElementById("ing-modal-img-preview");
+    if (imgInput) imgInput.value = imgUrl;
+    if (imgPreview) {
+      if (imgUrl) {
+        imgPreview.innerHTML = `<img src="${escapeHtml(imgUrl)}" class="modal-thumb-img" alt="Ảnh nguyên liệu" />`;
+      } else {
+        imgPreview.innerHTML = getIngredientDefaultIcon(ing);
+      }
+    }
   } else {
     modalTitle.textContent = "Thêm nguyên liệu mới vào kho";
     document.getElementById("ing-id").value = "";
@@ -2300,6 +2474,11 @@ function openIngredientModal(id = null) {
     document.getElementById("ing-min-stock").value = 0.5;
     document.getElementById("ing-pkg-size").value = 1;
     document.getElementById("ing-pkg-price").value = 35000;
+
+    const imgInput = document.getElementById("ing-image-url");
+    const imgPreview = document.getElementById("ing-modal-img-preview");
+    if (imgInput) imgInput.value = "";
+    if (imgPreview) imgPreview.innerHTML = "🥚";
   }
   updateUnitCalcPreview();
   document.getElementById("modal-ingredient").classList.remove("hidden");
@@ -2346,6 +2525,7 @@ async function saveIngredient() {
   const min_stock = parseFloat(document.getElementById("ing-min-stock").value) || 0;
   const package_size = parseFloat(document.getElementById("ing-pkg-size").value) || 1;
   const package_price = parseFloat(document.getElementById("ing-pkg-price").value) || 0;
+  const image_url = document.getElementById("ing-image-url")?.value || "";
 
   try {
     await apiPost("/api/ingredients/save", {
@@ -2356,7 +2536,8 @@ async function saveIngredient() {
       stock,
       min_stock,
       package_size,
-      package_price
+      package_price,
+      image_url
     });
     closeModal("modal-ingredient");
     showToast("✅ Đã lưu thông tin nguyên liệu!");
@@ -2512,15 +2693,20 @@ function renderRecipes() {
         .join("");
 
       const imgUrl = getRecipeImageUrl(r);
-      const imgHtml = imgUrl ? `<img src="${escapeHtml(imgUrl)}" alt="${escapeHtml(r.name)}" class="recipe-card-img" />` : "";
+      const imgHtml = imgUrl
+        ? `<img src="${escapeHtml(imgUrl)}" alt="${escapeHtml(r.name)}" class="recipe-card-img" />`
+        : `<div class="recipe-card-img recipe-card-img-placeholder">🧁</div>`;
 
       return `
       <div class="recipe-card">
         <div>
           <div class="recipe-top">
             <div class="recipe-title-box">
-              ${imgHtml}
-              <div>
+              <div class="recipe-card-img-wrap" onclick="triggerChangeRecipeImage(${r.id})" title="Bấm để tải/đổi ảnh bánh">
+                ${imgHtml}
+                <span class="recipe-cam-badge">📷 Đổi ảnh</span>
+              </div>
+              <div class="recipe-title-text-wrap">
                 <div class="recipe-title">${escapeHtml(r.name)}</div>
                 <span class="recipe-cat">${escapeHtml(r.category || "Bánh ngọt")} • 1 mẻ = ${formatNum(r.yield_qty)} ${escapeHtml(r.yield_unit)}${weightText}</span>
               </div>
@@ -2589,6 +2775,18 @@ function openRecipeModal(id = null) {
     document.getElementById("recipe-selling-price").value = r.selling_price || 0;
     document.getElementById("recipe-notes").value = r.notes || "";
 
+    const imgUrl = r.image_url || "";
+    const imgInput = document.getElementById("recipe-image-url");
+    const imgPreview = document.getElementById("recipe-modal-img-preview");
+    if (imgInput) imgInput.value = imgUrl;
+    if (imgPreview) {
+      if (imgUrl) {
+        imgPreview.innerHTML = `<img src="${escapeHtml(imgUrl)}" class="modal-thumb-img" alt="Ảnh bánh" />`;
+      } else {
+        imgPreview.innerHTML = "🧁";
+      }
+    }
+
     r.items.forEach((it) => addRecipeItemRow(it.ingredient_id, it.amount, it.recipe_unit));
   } else {
     document.getElementById("modal-recipe-title").textContent = "Tạo công thức bánh mới";
@@ -2600,6 +2798,11 @@ function openRecipeModal(id = null) {
     document.getElementById("recipe-cake-weight").value = 250;
     document.getElementById("recipe-selling-price").value = 65000;
     document.getElementById("recipe-notes").value = "";
+
+    const imgInput = document.getElementById("recipe-image-url");
+    const imgPreview = document.getElementById("recipe-modal-img-preview");
+    if (imgInput) imgInput.value = "";
+    if (imgPreview) imgPreview.innerHTML = "🧁";
 
     const firstIng = STATE.ingredients[0];
     if (firstIng) addRecipeItemRow(firstIng.id, 100, defaultRecipeUnitFor(firstIng.unit));
@@ -2721,6 +2924,7 @@ async function saveRecipe() {
   const cake_weight_gram = parseFloat(document.getElementById("recipe-cake-weight").value) || 0;
   const selling_price = parseFloat(document.getElementById("recipe-selling-price").value) || 0;
   const notes = document.getElementById("recipe-notes").value.trim();
+  const image_url = document.getElementById("recipe-image-url")?.value || "";
 
   const items = [];
   document.querySelectorAll("#recipe-items-container .recipe-item-row").forEach((row) => {
@@ -2741,6 +2945,7 @@ async function saveRecipe() {
       yield_unit,
       cake_weight_gram,
       selling_price,
+      image_url,
       notes,
       items
     });
@@ -3408,8 +3613,8 @@ function getCustomerDatabaseList() {
 }
 
 function renderCustomerDatabase() {
-  const tbody = document.getElementById("customer-database-tbody");
-  if (!tbody) return;
+  const container = document.getElementById("customer-database-list");
+  if (!container) return;
 
   const q = (document.getElementById("customer-db-search")?.value || "").toLowerCase().trim();
   const allCustomers = getCustomerDatabaseList();
@@ -3448,45 +3653,61 @@ function renderCustomerDatabase() {
   });
 
   if (filtered.length === 0) {
-    tbody.innerHTML = `<tr><td colspan="6" class="text-center muted" style="padding: 28px;">${allCustomers.length === 0 ? "Chưa có dữ liệu khách hàng nào (dữ liệu sẽ tự động tạo khi bạn xuất hóa đơn bán bánh)." : "Không tìm thấy khách hàng phù hợp."}</td></tr>`;
+    container.innerHTML = `<div class="card text-center muted" style="padding: 28px; grid-column: 1 / -1;">${allCustomers.length === 0 ? "Chưa có dữ liệu khách hàng nào (dữ liệu sẽ tự động tạo khi bạn xuất hóa đơn bán bánh)." : "Không tìm thấy khách hàng phù hợp."}</div>`;
     return;
   }
 
-  tbody.innerHTML = filtered
+  container.innerHTML = filtered
     .map((c) => {
       const cakePills = Object.entries(c.cakes_map)
         .sort((a, b) => b[1] - a[1])
         .map(([name, qty]) => `<span class="cust-cake-pill">🍰 ${escapeHtml(name)}: <strong>${formatNum(qty)}</strong></span>`)
-        .join(" ");
+        .join("");
 
       const safeName = escapeHtml(c.name).replace(/'/g, "\\'");
       const safePhone = escapeHtml(c.phone).replace(/'/g, "\\'");
 
       return `
-      <tr>
-        <td data-label="Khách hàng & SĐT" class="card-cell-header">
-          <strong>👤 ${escapeHtml(c.name)}</strong>
-          ${c.phone ? `<div class="muted" style="font-size:12.5px;">📞 ${escapeHtml(c.phone)}</div>` : ""}
-          <div class="muted" style="font-size:11px; margin-top:2px;">Gần nhất: ${escapeHtml(c.last_order_at || "—")}</div>
-        </td>
-        <td data-label="Số đơn" class="text-center nowrap-cell">
-          <strong>${c.order_count}</strong> đơn
-        </td>
-        <td data-label="Tổng bánh mua" class="text-center nowrap-cell">
-          <span class="badge-total-cakes">${formatNum(c.total_cakes)} cái</span>
-        </td>
-        <td data-label="Bánh đã ủng hộ">
-          <div style="display:flex; flex-wrap:wrap; gap:4px;">${cakePills || "—"}</div>
-        </td>
-        <td data-label="Tổng tiền ủng hộ" class="text-right nowrap-cell">
-          <strong class="text-green">${formatVND(c.total_spent)}</strong>
-        </td>
-        <td data-label="Thao tác" class="text-right card-cell-actions nowrap-cell">
-          <button type="button" class="btn btn-sm btn-primary" onclick="quickOrderForCustomer('${safeName}', '${safePhone}')">
+      <div class="customer-card">
+        <div class="cust-card-header">
+          <div class="cust-card-identity">
+            <div class="cust-card-avatar">👤</div>
+            <div>
+              <div class="cust-card-name">${escapeHtml(c.name)}</div>
+              ${c.phone ? `<div class="cust-card-phone">📞 <a href="tel:${escapeHtml(c.phone)}">${escapeHtml(c.phone)}</a></div>` : `<span class="muted" style="font-size:12px;">Chưa lưu SĐT</span>`}
+            </div>
+          </div>
+          <button type="button" class="btn btn-xs btn-primary cust-card-act" onclick="quickOrderForCustomer('${safeName}', '${safePhone}')">
             🧾 Bán nhanh
           </button>
-        </td>
-      </tr>
+        </div>
+
+        <div class="cust-card-stats">
+          <div class="cust-stat-item">
+            <span class="cust-stat-label">Số đơn</span>
+            <span class="cust-stat-val"><strong>${c.order_count}</strong> đơn</span>
+          </div>
+          <div class="cust-stat-item">
+            <span class="cust-stat-label">Đã mua</span>
+            <span class="cust-stat-val"><strong class="text-amber">${formatNum(c.total_cakes)}</strong> cái</span>
+          </div>
+          <div class="cust-stat-item">
+            <span class="cust-stat-label">Tổng ủng hộ</span>
+            <span class="cust-stat-val"><strong class="text-green">${formatVND(c.total_spent)}</strong></span>
+          </div>
+        </div>
+
+        <div class="cust-card-cakes">
+          <div class="cust-cakes-label">Các loại bánh đã ủng hộ:</div>
+          <div class="cust-cakes-wrap">
+            ${cakePills || '<span class="muted" style="font-size:12px;">Chưa rõ món cụ thể</span>'}
+          </div>
+        </div>
+
+        <div class="cust-card-footer">
+          <span class="muted" style="font-size:11.5px;">🕒 Mua gần nhất: <strong>${escapeHtml(c.last_order_at || "—")}</strong></span>
+        </div>
+      </div>
     `;
     })
     .join("");

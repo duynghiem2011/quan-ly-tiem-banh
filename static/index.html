@@ -620,20 +620,8 @@
             </div>
           </div>
 
-          <div class="table-responsive">
-            <table class="data-table responsive-card-table customer-db-table">
-              <thead>
-                <tr>
-                  <th>Khách hàng &amp; SĐT</th>
-                  <th class="text-center" style="width: 110px; white-space: nowrap;">Số đơn</th>
-                  <th class="text-center" style="width: 130px; white-space: nowrap;">Tổng bánh mua</th>
-                  <th>Các loại bánh đã ủng hộ</th>
-                  <th class="text-right" style="width: 150px; white-space: nowrap;">Tổng tiền ủng hộ</th>
-                  <th class="text-right" style="width: 165px; white-space: nowrap;">Thao tác</th>
-                </tr>
-              </thead>
-              <tbody id="customer-database-tbody"></tbody>
-            </table>
+          <div id="customer-database-container" class="customer-db-container">
+            <div id="customer-database-list" class="customer-cards-list"></div>
           </div>
         </div>
       </section>
@@ -649,6 +637,15 @@
       </div>
       <div class="modal-body">
         <input type="hidden" id="ing-id" />
+        <div class="form-group mb-12">
+          <label>📷 Hình ảnh nguyên liệu (Hiển thị kế bên tên nguyên liệu)</label>
+          <div class="modal-img-picker-row">
+            <div id="ing-modal-img-preview" class="modal-thumb-preview">🥚</div>
+            <input type="hidden" id="ing-image-url" />
+            <button type="button" class="btn btn-sm btn-outline" onclick="triggerSelectIngModalImage()">📷 Tải ảnh từ máy / điện thoại</button>
+            <button type="button" class="btn btn-sm btn-danger-ghost" onclick="clearIngModalImage()">🗑️ Xoá ảnh</button>
+          </div>
+        </div>
         <div class="form-row">
           <div class="form-group flex-2">
             <label>Tên nguyên liệu *</label>
@@ -786,6 +783,15 @@
       </div>
       <div class="modal-body">
         <input type="hidden" id="recipe-id" />
+        <div class="form-group mb-12">
+          <label>📷 Hình ảnh bánh (Hiển thị ở Công thức, Bán bánh &amp; Làm bánh)</label>
+          <div class="modal-img-picker-row">
+            <div id="recipe-modal-img-preview" class="modal-thumb-preview">🧁</div>
+            <input type="hidden" id="recipe-image-url" />
+            <button type="button" class="btn btn-sm btn-outline" onclick="triggerSelectRecipeModalImage()">📷 Tải ảnh từ máy / điện thoại</button>
+            <button type="button" class="btn btn-sm btn-danger-ghost" onclick="clearRecipeModalImage()">🗑️ Xoá ảnh</button>
+          </div>
+        </div>
         <div class="form-row">
           <div class="form-group flex-2">
             <label>Tên loại bánh / Công thức *</label>

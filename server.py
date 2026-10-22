@@ -100,9 +100,11 @@ def init_db():
         cost_per_unit REAL NOT NULL DEFAULT 0,
         package_size REAL DEFAULT 1,
         package_price REAL DEFAULT 0,
+        image_url TEXT DEFAULT '',
         updated_at TEXT NOT NULL
     )
     """)
+    ensure_column(cur, "ingredients", "image_url", "TEXT DEFAULT ''")
 
     cur.execute("""
     CREATE TABLE IF NOT EXISTS recipes (
@@ -463,6 +465,7 @@ class BakeryRequestHandler(http.server.SimpleHTTPRequestHandler):
                 package_size = float(data.get("package_size") or 1)
                 package_price = float(data.get("package_price") or 0)
                 cost_per_unit = float(data.get("cost_per_unit") or 0)
+                image_url = (data.get("image_url") or "").strip()
 
                 if package_size > 0 and package_price > 0:
                     cost_per_unit = package_price / package_size
@@ -475,9 +478,9 @@ class BakeryRequestHandler(http.server.SimpleHTTPRequestHandler):
                     diff = round(stock - old["stock"], 4)
                     cur.execute("""
                         UPDATE ingredients
-                        SET name=?, category=?, unit=?, stock=?, min_stock=?, cost_per_unit=?, package_size=?, package_price=?, updated_at=?
+                        SET name=?, category=?, unit=?, stock=?, min_stock=?, cost_per_unit=?, package_size=?, package_price=?, image_url=?, updated_at=?
                         WHERE id=?
-                    """, (name, category, unit, stock, min_stock, cost_per_unit, package_size, package_price, now, ing_id))
+                    """, (name, category, unit, stock, min_stock, cost_per_unit, package_size, package_price, image_url, now, ing_id))
                     if abs(diff) > 0.0001:
                         sign = "+" if diff > 0 else ""
                         cur.execute("""
@@ -500,9 +503,9 @@ class BakeryRequestHandler(http.server.SimpleHTTPRequestHandler):
                     log_activity(cur, "INGREDIENT", f"Cập nhật nguyên liệu: {name} (Tồn: {stock:g} {unit}, Giá vốn: {round(cost_per_unit):,}đ/{unit})", now)
                 else:
                     cur.execute("""
-                        INSERT INTO ingredients (name, category, unit, stock, min_stock, cost_per_unit, package_size, package_price, updated_at)
-                        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
-                    """, (name, category, unit, stock, min_stock, cost_per_unit, package_size, package_price, now))
+                        INSERT INTO ingredients (name, category, unit, stock, min_stock, cost_per_unit, package_size, package_price, image_url, updated_at)
+                        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                    """, (name, category, unit, stock, min_stock, cost_per_unit, package_size, package_price, image_url, now))
                     new_id = cur.lastrowid
                     cur.execute("""
                         INSERT INTO transactions (type, title, details_json, total_cost, created_at)
@@ -671,6 +674,20 @@ class BakeryRequestHandler(http.server.SimpleHTTPRequestHandler):
                 log_activity(cur, "RECIPE", f"{action_verb}: {name} (Giá bán: {round(selling_price):,}đ/{yield_unit})", now)
                 conn.commit()
                 return self.send_json({"ok": True, "recipe_id": recipe_id})
+
+            if path == "/api/ingredients/update_image":
+                ing_id = int(data.get("id") or 0)
+                image_url = (data.get("image_url") or "").strip()
+                cur.execute("UPDATE ingredients SET image_url = ?, updated_at = ? WHERE id = ?", (image_url, now, ing_id))
+                conn.commit()
+                return self.send_json({"ok": True, "image_url": image_url})
+
+            if path == "/api/recipes/update_image":
+                rec_id = int(data.get("id") or 0)
+                image_url = (data.get("image_url") or "").strip()
+                cur.execute("UPDATE recipes SET image_url = ?, updated_at = ? WHERE id = ?", (image_url, now, rec_id))
+                conn.commit()
+                return self.send_json({"ok": True, "image_url": image_url})
 
             # 5. Delete Recipe
             if path == "/api/recipes/delete":
