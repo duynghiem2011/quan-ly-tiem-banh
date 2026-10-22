@@ -813,7 +813,7 @@ function renderDashboard() {
         const statusBadge = canBake
           ? `<span class="stock-pill stock-ok">Đủ làm ${r.max_cakes || r.max_batches} ${escapeHtml(r.yield_unit)}</span>`
           : `<span class="stock-pill stock-out">Thiếu NL</span>`;
-        const weightBadge = r.cake_weight_gram > 0 ? ` (${formatNum(r.cake_weight_gram)}g/${escapeHtml(r.yield_unit)})` : "";
+        const weightBadge = r.cake_weight_gram > 0 ? ` <span class="muted" style="font-weight:500; font-size:13px;">(${formatNum(r.cake_weight_gram)}g/${escapeHtml(r.yield_unit)})</span>` : "";
         const imgUrl = getRecipeImageUrl(r);
         const imgHtml = imgUrl ? `<img src="${escapeHtml(imgUrl)}" alt="${escapeHtml(r.name)}" class="quick-recipe-thumb" />` : "";
         return `
@@ -823,14 +823,17 @@ function renderDashboard() {
             <div class="quick-recipe-info">
               <h4>${escapeHtml(r.name)}${weightBadge}</h4>
               <div class="quick-recipe-meta">
-                Giá bán 1 ${escapeHtml(r.yield_unit)}: <strong class="text-green">${formatVND(r.selling_price)}</strong>
-                • Giá vốn 1 ${escapeHtml(r.yield_unit)}: <strong>${formatVND(r.cost_per_cake)}</strong> • ${statusBadge}
+                <span class="meta-chunk">Giá bán: <strong class="text-green">${formatVND(r.selling_price)}</strong></span>
+                <span class="meta-sep">•</span>
+                <span class="meta-chunk">Giá vốn: <strong>${formatVND(r.cost_per_cake)}</strong></span>
+                <span class="meta-sep">•</span>
+                ${statusBadge}
               </div>
             </div>
           </div>
-          <div style="display:flex; gap:6px; align-items:center;">
-            <button class="btn btn-sm btn-secondary" onclick="jumpToSell(${r.id})">🧾 Bán ngay</button>
-            <button class="btn btn-sm btn-primary" onclick="jumpToBake(${r.id})">🧁 Làm bánh</button>
+          <div class="quick-recipe-actions">
+            <button type="button" class="btn btn-sm btn-secondary" onclick="jumpToSell(${r.id})">🧾 Bán ngay</button>
+            <button type="button" class="btn btn-sm btn-primary" onclick="jumpToBake(${r.id})">🧁 Làm bánh</button>
           </div>
         </div>
       `;
@@ -894,16 +897,15 @@ function renderPosTab() {
           <td data-label="Tên bánh" class="pos-cell-main">
             <div class="pos-cake-cell">
               ${imgHtml}
-              <div>
-                <div>
-                  <strong>${escapeHtml(r.name)}</strong>
+              <div class="pos-cake-info">
+                <div class="pos-cake-title-line">
+                  <strong class="pos-cake-name">${escapeHtml(r.name)}</strong>
                   <span class="pos-selected-tag">✓ Đã chọn</span>
                 </div>
                 <div class="pos-baked-status">
-                  <span class="pos-baked-pill ${pillClass}">
-                    🧁 Đã làm hôm nay: <strong>${formatNum(bakedToday)}</strong> • Còn lại: <strong>${formatNum(remaining)}</strong> bánh
-                  </span>
-                  ${soldToday > 0 ? `<span class="muted" style="font-size:11.5px;">(Đã bán: ${formatNum(soldToday)})</span>` : ""}
+                  <span class="pos-baked-pill ${pillClass}">🧁 Còn lại: <strong>${formatNum(remaining)}</strong></span>
+                  <span class="pos-baked-pill meta-pill">Đã làm: <strong>${formatNum(bakedToday)}</strong></span>
+                  ${soldToday > 0 ? `<span class="pos-baked-pill meta-pill">Đã bán: <strong>${formatNum(soldToday)}</strong></span>` : ""}
                 </div>
               </div>
             </div>
@@ -918,7 +920,7 @@ function renderPosTab() {
               <button type="button" class="pos-qty-btn" onclick="stepPosQty(event, this, 1)">+</button>
             </div>
           </td>
-          <td data-label="Thành tiền" class="text-right">
+          <td data-label="Thành tiền" class="text-right nowrap-cell">
             <strong class="pos-line-total">0 đ</strong>
           </td>
         </tr>
@@ -1166,13 +1168,20 @@ function renderOrdersHistory() {
         .join("");
       const profit = (o.total_amount || 0) - (o.total_cost || 0);
 
+      const dtParts = String(o.created_at || "").split(" ");
+      const dateStr = dtParts[0] || "";
+      const timeStr = dtParts[1] || "";
+
       return `
       <tr>
-        <td data-label="Mã Bill" class="card-cell-header">
+        <td data-label="Mã Bill" class="card-cell-header nowrap-cell">
           <strong>${escapeHtml(o.bill_code)}</strong>
           <div><span class="muted" style="font-size:11.5px;">${escapeHtml(o.payment_method)}</span></div>
         </td>
-        <td data-label="Thời gian" class="muted" style="font-size:13px;">${escapeHtml(o.created_at)}</td>
+        <td data-label="Thời gian" class="muted nowrap-cell" style="font-size:13px;">
+          <div>${escapeHtml(dateStr)}</div>
+          ${timeStr ? `<div style="font-size:11.5px;">🕒 ${escapeHtml(timeStr)}</div>` : ""}
+        </td>
         <td data-label="Khách hàng">
           <strong>${escapeHtml(o.customer_name)}</strong>
           ${o.customer_phone ? `<div class="muted" style="font-size:12.5px;">📞 ${escapeHtml(o.customer_phone)}</div>` : ""}
@@ -1181,9 +1190,9 @@ function renderOrdersHistory() {
         <td data-label="Bánh đã mua" style="font-size:13px;">
           ${itemsSummary}
         </td>
-        <td data-label="Tổng thu" class="text-right"><strong>${formatVND(o.total_amount)}</strong></td>
-        <td data-label="Lợi nhuận" class="text-right"><strong class="text-green">+${formatVND(profit)}</strong></td>
-        <td data-label="Thao tác" class="text-right card-cell-actions">
+        <td data-label="Tổng thu" class="text-right nowrap-cell"><strong>${formatVND(o.total_amount)}</strong></td>
+        <td data-label="Lợi nhuận" class="text-right nowrap-cell"><strong class="text-green">+${formatVND(profit)}</strong></td>
+        <td data-label="Thao tác" class="text-right card-cell-actions nowrap-cell">
           <div class="action-btn-group">
             <button type="button" class="btn btn-sm btn-primary" onclick="openBillPreviewById(${o.id}, false)">🖨️ Xem / In Bill</button>
             <button type="button" class="btn btn-sm btn-danger-ghost" onclick="deleteOrder(${o.id})">Huỷ</button>
@@ -1443,22 +1452,22 @@ function renderBakeDailySummary() {
             <div style="font-weight:700; color:var(--text);">🧁 ${escapeHtml(r.name)}</div>
             ${subNote}
           </td>
-          <td data-label="Đã làm hôm nay" style="text-align:center;">
-            <span style="font-weight:800; font-size:0.92rem; color:#39557a; background:#eaf1fb; border:1px solid #d5e3f5; padding:4px 10px; border-radius:999px; display:inline-block;">
+          <td data-label="Đã làm hôm nay" class="nowrap-cell" style="text-align:center;">
+            <span style="font-weight:800; font-size:0.9rem; color:#39557a; background:#eaf1fb; border:1px solid #d5e3f5; padding:4px 10px; border-radius:999px; display:inline-block; white-space:nowrap;">
               ${formatNum(bakedToday)} ${unit}
             </span>
           </td>
-          <td data-label="Đã bán hôm nay" style="text-align:center;">
-            <span style="font-weight:700; font-size:0.9rem; color:var(--text-muted);">
+          <td data-label="Đã bán hôm nay" class="nowrap-cell" style="text-align:center;">
+            <span style="font-weight:700; font-size:0.9rem; color:var(--text-muted); white-space:nowrap;">
               ${formatNum(soldToday)} ${unit}
             </span>
           </td>
-          <td data-label="Còn lại trong ngày" style="text-align:center;">
-            <span style="font-weight:800; font-size:0.92rem; padding:4px 10px; border-radius:999px; display:inline-block; ${remBadgeColor}">
+          <td data-label="Còn lại trong ngày" class="nowrap-cell" style="text-align:center;">
+            <span style="font-weight:800; font-size:0.9rem; padding:4px 10px; border-radius:999px; display:inline-block; white-space:nowrap; ${remBadgeColor}">
               ${formatNum(remToday)} ${unit}
             </span>
           </td>
-          <td data-label="Cộng / Trừ thủ công" class="card-cell-actions" style="text-align:center;">
+          <td data-label="Cộng / Trừ thủ công" class="card-cell-actions nowrap-cell" style="text-align:center;">
             <div class="daily-adj-controls">
               <button type="button" class="btn btn-outline btn-xs" onclick="adjustDailyBaked(${r.id}, -1)" title="Trừ bớt 1 ${unit}">−1</button>
               <input
@@ -1472,11 +1481,7 @@ function renderBakeDailySummary() {
               />
               <button type="button" class="btn btn-outline btn-xs" onclick="adjustDailyBaked(${r.id}, 1)" title="Cộng thêm 1 ${unit}">+1</button>
               <button type="button" class="btn btn-secondary btn-xs" onclick="adjustDailyBaked(${r.id}, 5)" title="Cộng thêm 5 ${unit}">+5</button>
-              ${
-                bakedToday > 0
-                  ? `<button type="button" class="btn btn-danger btn-xs" onclick="setDailyBaked(${r.id}, 0)" title="Đặt về 0">Về 0</button>`
-                  : ""
-              }
+              <button type="button" class="btn btn-danger btn-xs" onclick="setDailyBaked(${r.id}, 0)" title="Đặt về 0" ${bakedToday <= 0 ? "disabled" : ""}>Về 0</button>
             </div>
           </td>
         </tr>
@@ -1565,25 +1570,25 @@ function renderBakePreview() {
 
       const convLabel =
         rUnit.toLowerCase() !== sUnit.toLowerCase()
-          ? `<div class="muted" style="font-size:11.5px;">(= -${formatNum(neededInStockUnit)} ${escapeHtml(sUnit)} kho)</div>`
+          ? `<div class="muted" style="font-size:11.5px; white-space:nowrap;">(= -${formatNum(neededInStockUnit)} ${escapeHtml(sUnit)} kho)</div>`
           : "";
 
       return `
       <tr>
         <td data-label="Nguyên liệu" class="card-cell-header"><strong>${escapeHtml(it.ingredient_name)}</strong></td>
-        <td data-label="Định lượng cần trừ" class="text-right">
+        <td data-label="Định lượng cần trừ" class="text-right nowrap-cell">
           <strong class="text-danger">-${formatNum(neededInRecipeUnit)} ${escapeHtml(rUnit)}</strong>
           ${convLabel}
         </td>
-        <td data-label="Kho hiện có" class="text-right">${formatDualStock(currentStock, sUnit)}</td>
-        <td data-label="Kho còn lại" class="text-right">
+        <td data-label="Kho hiện có" class="text-right nowrap-cell">${formatDualStock(currentStock, sUnit)}</td>
+        <td data-label="Kho còn lại" class="text-right nowrap-cell">
           ${
             isShort
-              ? `<span class="stock-pill stock-out">Thiếu ${formatDualStock(Math.abs(remainingStock), sUnit)}</span>`
-              : `<span class="stock-pill stock-ok">Còn ${formatDualStock(remainingStock, sUnit)}</span>`
+              ? `<span class="stock-pill stock-out">Thiếu ${formatNum(Math.abs(remainingStock))} ${escapeHtml(sUnit)}</span>`
+              : `<span class="stock-pill stock-ok">Còn ${formatNum(remainingStock)} ${escapeHtml(sUnit)}</span>`
           }
         </td>
-        <td data-label="Giá vốn" class="text-right muted">${formatVND(neededInStockUnit * it.cost_per_unit)}</td>
+        <td data-label="Giá vốn" class="text-right muted nowrap-cell">${formatVND(neededInStockUnit * it.cost_per_unit)}</td>
       </tr>
     `;
     })
@@ -1595,10 +1600,10 @@ function renderBakePreview() {
         <thead>
           <tr>
             <th>Nguyên liệu</th>
-            <th class="text-right">Định lượng cần trừ</th>
-            <th class="text-right">Kho hiện có</th>
-            <th class="text-right">Kho còn lại</th>
-            <th class="text-right">Giá vốn</th>
+            <th class="text-right" style="white-space:nowrap;">Định lượng trừ</th>
+            <th class="text-right" style="white-space:nowrap;">Kho hiện có</th>
+            <th class="text-right" style="white-space:nowrap;">Kho còn lại</th>
+            <th class="text-right" style="white-space:nowrap;">Giá vốn</th>
           </tr>
         </thead>
         <tbody>${rowsHtml}</tbody>
@@ -1685,9 +1690,9 @@ function renderIngredients() {
       const uLower = String(i.unit || "").toLowerCase();
       let subUnitPrice = "";
       if (uLower === "kg") {
-        subUnitPrice = `<div class="muted" style="font-size:11.5px;">(= <strong>${formatNum(i.cost_per_unit / 1000)} đ / 1g</strong>)</div>`;
+        subUnitPrice = `<div class="muted" style="font-size:11.5px; white-space:nowrap;">(= <strong>${formatNum(i.cost_per_unit / 1000)} đ / 1g</strong>)</div>`;
       } else if (uLower === "lít" || uLower === "lit") {
-        subUnitPrice = `<div class="muted" style="font-size:11.5px;">(= <strong>${formatNum(i.cost_per_unit / 1000)} đ / 1ml</strong>)</div>`;
+        subUnitPrice = `<div class="muted" style="font-size:11.5px; white-space:nowrap;">(= <strong>${formatNum(i.cost_per_unit / 1000)} đ / 1ml</strong>)</div>`;
       }
 
       return `
@@ -1695,19 +1700,19 @@ function renderIngredients() {
         <td data-label="Tên nguyên liệu" class="card-cell-header">
           <strong>${escapeHtml(i.name)}</strong>
         </td>
-        <td data-label="Phân loại"><span class="recipe-cat">${escapeHtml(i.category || "Chung")}</span></td>
-        <td data-label="Tồn kho hiện tại" class="text-right">
+        <td data-label="Phân loại" class="nowrap-cell"><span class="recipe-cat" style="margin-top:0;">${escapeHtml(i.category || "Chung")}</span></td>
+        <td data-label="Tồn kho hiện tại" class="text-right nowrap-cell">
           <span class="stock-pill ${statusClass}">
             ${formatDualStock(i.stock, i.unit)} (${statusLabel})
           </span>
         </td>
-        <td data-label="Mức báo sắp hết" class="text-right muted">${formatDualStock(i.min_stock, i.unit)}</td>
-        <td data-label="Giá vốn" class="text-right">
+        <td data-label="Mức báo sắp hết" class="text-right muted nowrap-cell">${formatDualStock(i.min_stock, i.unit)}</td>
+        <td data-label="Giá vốn" class="text-right nowrap-cell">
           <strong>${formatVND(i.cost_per_unit)}</strong> / ${escapeHtml(i.unit)}
           ${subUnitPrice}
         </td>
-        <td data-label="Giá trị tồn" class="text-right"><strong>${formatVND(totalVal)}</strong></td>
-        <td data-label="Thao tác" class="text-right card-cell-actions">
+        <td data-label="Giá trị tồn" class="text-right nowrap-cell"><strong>${formatVND(totalVal)}</strong></td>
+        <td data-label="Thao tác" class="text-right card-cell-actions nowrap-cell">
           <div class="action-btn-group">
             <button type="button" class="btn btn-sm btn-primary" onclick="openRestockModal(${i.id})">+ Nhập thêm</button>
             <button type="button" class="btn btn-sm btn-outline" onclick="openIngredientModal(${i.id})">Sửa</button>

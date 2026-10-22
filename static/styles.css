@@ -385,9 +385,14 @@ button, input, select, textarea {
 /* POS LAYOUT (BÁN BÁNH & IN BILL) */
 .pos-layout {
   display: grid;
-  grid-template-columns: 1.35fr 0.95fr;
-  gap: 22px;
+  grid-template-columns: 1.45fr 0.9fr;
+  gap: 20px;
   align-items: start;
+}
+
+.pos-cake-table th,
+.pos-cake-table td {
+  padding: 10px 10px;
 }
 
 .pos-cake-table tr.pos-item-row {
@@ -405,16 +410,34 @@ button, input, select, textarea {
   box-shadow: inset 4px 0 0 var(--primary);
 }
 
+.pos-cake-info {
+  min-width: 0;
+  flex: 1;
+}
+
+.pos-cake-title-line {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex-wrap: wrap;
+}
+
+.pos-cake-name {
+  font-size: 14.5px;
+  line-height: 1.3;
+  color: var(--text);
+}
+
 .pos-selected-tag {
   display: none;
   font-size: 11px;
   font-weight: 700;
   background: var(--primary);
   color: #fff;
-  padding: 2px 7px;
+  padding: 1px 7px;
   border-radius: 99px;
-  margin-left: 6px;
-  vertical-align: middle;
+  white-space: nowrap;
+  flex-shrink: 0;
 }
 
 .pos-cake-table tr.selected-row .pos-selected-tag {
@@ -422,22 +445,21 @@ button, input, select, textarea {
 }
 
 .pos-baked-status {
-  display: inline-flex;
+  display: flex;
   align-items: center;
-  gap: 8px;
-  margin-top: 4px;
-  font-size: 12.5px;
+  gap: 6px;
+  margin-top: 5px;
   flex-wrap: wrap;
 }
 
 .pos-baked-pill {
-  display: inline-flex;
-  align-items: center;
-  gap: 4px;
-  padding: 2px 9px;
+  display: inline-block;
+  white-space: nowrap;
+  padding: 2px 8px;
   border-radius: 99px;
   font-weight: 600;
-  font-size: 12px;
+  font-size: 11.5px;
+  line-height: 1.4;
 }
 
 .pos-baked-pill.has-cake {
@@ -452,15 +474,23 @@ button, input, select, textarea {
   border: 1px solid #e2e8f0;
 }
 
+.pos-baked-pill.meta-pill {
+  background: #f1f5f9;
+  color: #475569;
+  border: 1px solid #e2e8f0;
+  font-weight: 500;
+}
+
 .pos-qty-box {
   display: inline-flex;
   align-items: center;
   gap: 4px;
+  white-space: nowrap;
 }
 
 .pos-qty-btn {
-  width: 32px;
-  height: 32px;
+  width: 30px;
+  height: 30px;
   border-radius: 8px;
   border: 1px solid var(--border);
   background: var(--surface-alt);
@@ -483,7 +513,7 @@ button, input, select, textarea {
 }
 
 .pos-qty-input {
-  width: 54px;
+  width: 48px;
   text-align: center;
   padding: 5px 4px;
   border: 1px solid var(--border);
@@ -495,15 +525,23 @@ button, input, select, textarea {
 }
 
 .pos-price-input {
-  width: 108px;
+  width: 96px;
   text-align: right;
-  padding: 5px 8px;
+  padding: 5px 7px;
   border: 1px solid var(--border);
   border-radius: 6px;
   font-weight: 600;
   font-size: 13.5px;
   background: #ffffff;
   color: var(--text);
+}
+
+.pos-line-total {
+  white-space: nowrap;
+}
+
+.nowrap-cell {
+  white-space: nowrap;
 }
 
 .pos-summary-box {
@@ -702,14 +740,39 @@ button, input, select, textarea {
   gap: 12px;
 }
 
+.quick-recipe-info {
+  min-width: 0;
+  flex: 1;
+}
+
 .quick-recipe-info h4 {
   font-size: 15px;
-  margin-bottom: 3px;
+  margin-bottom: 4px;
+  line-height: 1.3;
 }
 
 .quick-recipe-meta {
   font-size: 12.5px;
   color: var(--text-muted);
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 5px;
+}
+
+.quick-recipe-meta .meta-chunk {
+  white-space: nowrap;
+}
+
+.quick-recipe-meta .meta-sep {
+  color: var(--border);
+}
+
+.quick-recipe-actions {
+  display: flex;
+  gap: 6px;
+  align-items: center;
+  flex-shrink: 0;
 }
 
 /* RECENT TX */
@@ -722,7 +785,7 @@ button, input, select, textarea {
 .tx-item {
   display: flex;
   justify-content: space-between;
-  align-items: flex-start;
+  align-items: center;
   padding: 12px 14px;
   border: 1px solid var(--border);
   border-radius: var(--radius-sm);
@@ -732,6 +795,7 @@ button, input, select, textarea {
 
 .tx-badge {
   display: inline-block;
+  white-space: nowrap;
   padding: 2px 8px;
   border-radius: 6px;
   font-size: 11px;
@@ -778,6 +842,7 @@ button, input, select, textarea {
   border: 1px solid var(--border);
   padding: 2px 8px;
   border-radius: 6px;
+  white-space: nowrap;
 }
 
 .history-card-header {
@@ -805,6 +870,7 @@ button, input, select, textarea {
   border-radius: 8px;
   font-size: 13px;
   user-select: none;
+  white-space: nowrap;
 }
 
 .history-select-all input[type="checkbox"],
@@ -825,6 +891,7 @@ button, input, select, textarea {
   align-items: flex-start;
   gap: 12px;
   flex: 1;
+  min-width: 0;
 }
 
 .tx-check-wrap {
@@ -837,7 +904,8 @@ button, input, select, textarea {
   display: flex;
   align-items: center;
   gap: 6px;
-  flex-wrap: wrap;
+  flex-wrap: nowrap;
+  flex-shrink: 0;
   justify-content: flex-end;
 }
 
@@ -965,8 +1033,9 @@ button, input, select, textarea {
   display: inline-flex;
   align-items: center;
   gap: 6px;
-  flex-wrap: wrap;
+  flex-wrap: nowrap;
   justify-content: flex-end;
+  white-space: nowrap;
 }
 
 .shortage-banner {
@@ -1082,13 +1151,14 @@ button, input, select, textarea {
 }
 
 .stock-pill {
-  display: inline-flex;
-  align-items: center;
-  gap: 5px;
+  display: inline-block;
+  white-space: nowrap;
+  flex-shrink: 0;
   padding: 3px 10px;
   border-radius: 99px;
   font-weight: 700;
-  font-size: 12.5px;
+  font-size: 12px;
+  line-height: 1.4;
 }
 
 .stock-ok {
@@ -1131,7 +1201,7 @@ button, input, select, textarea {
   align-items: flex-start;
   gap: 12px;
   margin-bottom: 12px;
-  flex-wrap: wrap;
+  flex-wrap: nowrap;
 }
 
 .recipe-title-box {
