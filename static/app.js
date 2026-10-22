@@ -120,7 +120,14 @@ function normalizeCloudUrl(raw) {
 }
 
 function getCloudDbUrl() {
-  return normalizeCloudUrl(localStorage.getItem(CLOUD_URL_STORAGE_KEY) || DEFAULT_CLOUD_DB_URL || "");
+  let u = localStorage.getItem(CLOUD_URL_STORAGE_KEY);
+  if (!u && DEFAULT_CLOUD_DB_URL) {
+    u = DEFAULT_CLOUD_DB_URL;
+    try {
+      localStorage.setItem(CLOUD_URL_STORAGE_KEY, DEFAULT_CLOUD_DB_URL);
+    } catch (e) {}
+  }
+  return normalizeCloudUrl(u || DEFAULT_CLOUD_DB_URL || "");
 }
 
 function initCloudFromUrlParam() {
@@ -3342,23 +3349,23 @@ function updateCloudStatusBadges() {
 
   const sidebarTitle = document.getElementById("sidebar-sync-title");
   if (sidebarTitle) {
-    sidebarTitle.textContent = isConnected ? "☁️ Đã bật Cloud (Live)" : "☁️ Đồng bộ Máy tính & ĐT";
+    sidebarTitle.textContent = isConnected ? "🟢 Cloud DB: Tự động lưu" : "☁️ Đồng bộ Máy tính & ĐT";
   }
   const sidebarHint = document.getElementById("sidebar-sync-hint");
   if (sidebarHint) {
-    sidebarHint.textContent = isConnected ? "Dữ liệu đang đồng bộ realtime" : "Bấm cài đặt Cloud / Quét QR";
+    sidebarHint.textContent = isConnected ? "Đang tự động lưu vĩnh viễn" : "Bấm cài đặt Cloud / Quét QR";
   }
 
   const mobileBtn = document.getElementById("mobile-cloud-btn");
   if (mobileBtn) {
-    mobileBtn.textContent = isConnected ? "☁️ Đang đồng bộ" : "☁️ Đồng bộ";
+    mobileBtn.textContent = isConnected ? "🟢 Tự động lưu" : "☁️ Đồng bộ";
     mobileBtn.classList.toggle("btn-primary", isConnected);
     mobileBtn.classList.toggle("btn-outline", !isConnected);
   }
 
   const dashBtn = document.getElementById("dashboard-cloud-btn");
   if (dashBtn) {
-    dashBtn.textContent = isConnected ? "☁️ Cloud: Đang đồng bộ" : "☁️ Đồng bộ Máy tính & ĐT";
+    dashBtn.textContent = isConnected ? "🟢 Cloud DB: Tự động lưu" : "☁️ Đồng bộ Máy tính & ĐT";
     dashBtn.classList.toggle("btn-secondary", isConnected);
   }
 
@@ -3366,7 +3373,7 @@ function updateCloudStatusBadges() {
   if (modalBadge) {
     if (isConnected) {
       modalBadge.className = "stock-pill stock-ok";
-      modalBadge.textContent = "✅ Đang kết nối Cloud";
+      modalBadge.textContent = "🟢 Tự động lưu 100%";
     } else {
       modalBadge.className = "stock-pill stock-low";
       modalBadge.textContent = "Chưa kết nối Cloud";
@@ -3376,6 +3383,20 @@ function updateCloudStatusBadges() {
   const inputEl = document.getElementById("cloud-db-url-input");
   if (inputEl && document.activeElement !== inputEl) {
     inputEl.value = cloudUrl;
+  }
+}
+
+async function forceSyncCloudNow() {
+  try {
+    showToast("⏳ Đang đồng bộ dữ liệu mới nhất từ Cloud Database...");
+    const cloudUrl = getCloudDbUrl();
+    if (cloudUrl) {
+      await fetchStateFromCloud(cloudUrl);
+    }
+    await loadState();
+    showToast("🟢 Đã đồng bộ thành công! Dữ liệu đang tự động lưu.");
+  } catch (err) {
+    showToast("Lỗi đồng bộ: " + err.message, true);
   }
 }
 

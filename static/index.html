@@ -589,9 +589,12 @@
         <div id="customer-database-section" class="card">
           <div class="card-header history-card-header">
             <div>
-              <h2>👥 Cơ sở dữ liệu khách hàng &amp; Thống kê ủng hộ (<span id="customer-total-count">0</span> khách)</h2>
+              <h2>
+                👥 Cơ sở dữ liệu khách hàng &amp; Thống kê ủng hộ (<span id="customer-total-count">0</span> khách)
+                <span class="stock-pill stock-ok" style="font-size:11px; vertical-align:middle; margin-left:6px; font-weight:700;">🟢 Tự động lưu 100%</span>
+              </h2>
               <p class="muted" style="font-size: 13px; margin-top: 2px;">
-                Tự động thống kê từ các hóa đơn: số lần mua, tổng số lượng bánh đã mua và chi tiết từng loại bánh khách đã ủng hộ tiệm.
+                Hệ thống tự động lưu vĩnh viễn và tổng hợp từ tất cả hóa đơn bán bánh: số lần mua, tổng số lượng bánh đã mua và chi tiết từng loại bánh khách đã ủng hộ tiệm.
               </p>
             </div>
             <div class="history-bulk-bar">
@@ -877,39 +880,49 @@
       <div class="modal-body">
         <div class="cost-calc-box" style="margin-top:0; margin-bottom:14px;">
           <div style="display:flex; justify-content:space-between; align-items:center; gap:8px; flex-wrap:wrap; margin-bottom:8px;">
-            <strong style="font-size:14px;">1. Kết nối Cloud Database miễn phí (Firebase Realtime DB)</strong>
-            <span id="cloud-sync-status-badge" class="stock-pill stock-low">Chưa kết nối Cloud</span>
+            <strong style="font-size:14px;">1. Trạng thái Cloud Database (Firebase Realtime DB)</strong>
+            <span id="cloud-sync-status-badge" class="stock-pill stock-ok">🟢 Tự động lưu 100%</span>
           </div>
-          <p class="muted" style="font-size:12.5px; margin-bottom:8px;">
-            Dán đường dẫn <strong>Firebase Realtime Database URL</strong> vào ô bên dưới để Máy tính và Điện thoại tự động đồng bộ tức thì mọi lúc mọi nơi (cả 4G &amp; Wi-Fi):
-          </p>
-          <div class="form-group" style="margin-bottom:8px;">
-            <input
-              type="url"
-              id="cloud-db-url-input"
-              class="form-control"
-              placeholder="VD: https://mem-barkery-default-rtdb.asia-southeast1.firebasedatabase.app"
-            />
+
+          <div style="background:#f0fdf4; border:1px solid #bbf7d0; border-radius:8px; padding:10px 12px; margin-bottom:10px;">
+            <div style="color:#15803d; font-weight:700; font-size:13.5px; margin-bottom:3px; display:flex; align-items:center; gap:6px;">
+              <span>⚡</span> <span>Hệ thống TỰ ĐỘNG LƯU vĩnh viễn 100%</span>
+            </div>
+            <div style="color:#166534; font-size:12.5px; line-height:1.45;">
+              Mọi thay đổi (nhập/sửa nguyên liệu, làm bánh, bán bánh, xuất bill, dữ liệu khách hàng, ảnh bánh...) đều được <strong>tự động lưu ngay tức thì</strong> lên Cloud Database Firebase. Bạn <strong>không cần phải bấm lưu thủ công</strong> nữa!
+            </div>
           </div>
-          <div style="display:flex; gap:8px; flex-wrap:wrap;">
-            <button type="button" class="btn btn-sm btn-primary" onclick="saveAndConnectCloudDb(true)">
-              ☁️ Lưu &amp; Đẩy dữ liệu máy này lên Cloud
-            </button>
-            <button type="button" class="btn btn-sm btn-secondary" onclick="saveAndConnectCloudDb(false)">
-              🔄 Kết nối &amp; Tải dữ liệu từ Cloud về
-            </button>
-            <button type="button" class="btn btn-sm btn-danger-ghost" onclick="disconnectCloudDb()">
-              Ngắt Cloud
+
+          <div style="display:flex; gap:8px; flex-wrap:wrap; margin-bottom:8px;">
+            <button type="button" class="btn btn-sm btn-primary" onclick="forceSyncCloudNow()">
+              🔄 Đồng bộ / Làm mới dữ liệu ngay
             </button>
           </div>
-          <details style="margin-top:10px; font-size:12.5px; color:var(--secondary);">
-            <summary style="cursor:pointer; font-weight:700;">💡 Hướng dẫn lấy link Firebase miễn phí trong 1 phút (Bấm để xem)</summary>
-            <ol style="padding-left:18px; margin-top:6px; line-height:1.55; color:var(--text);">
-              <li>Truy cập <a href="https://console.firebase.google.com/" target="_blank" rel="noopener">console.firebase.google.com</a> (đăng nhập Gmail) → bấm <strong>Create a project</strong> (đặt tên <code>mem-barkery</code>).</li>
-              <li>Ở menu trái chọn <strong>Build → Realtime Database</strong> → bấm <strong>Create Database</strong>.</li>
-              <li>Chọn vị trí Singapore/US → chọn <strong>Start in test mode (Chế độ thử nghiệm)</strong> → bấm <strong>Enable</strong>.</li>
-              <li>Copy đường link dạng <code>https://...-default-rtdb....firebasedatabase.app</code> dán vào ô trên (hoặc gửi cho AI để gắn cố định vào web).</li>
-            </ol>
+
+          <details style="margin-top:8px; font-size:12px; color:var(--text-muted);">
+            <summary style="cursor:pointer; font-weight:600; padding:4px 0;">⚙️ Cài đặt đường dẫn Database (Đã kích hoạt sẵn)</summary>
+            <p class="muted" style="margin:6px 0 8px 0; font-size:12px;">
+              Đường dẫn Cloud Database mặc định đã được ghim cố định cho tiệm:
+            </p>
+            <div class="form-group" style="margin-bottom:8px;">
+              <input
+                type="url"
+                id="cloud-db-url-input"
+                class="form-control"
+                placeholder="https://membakery-c7285-default-rtdb.asia-southeast1.firebasedatabase.app"
+              />
+            </div>
+            <div style="display:flex; gap:6px; flex-wrap:wrap;">
+              <button type="button" class="btn btn-xs btn-outline" onclick="saveAndConnectCloudDb(true)">
+                ☁️ Đẩy lại toàn bộ dữ liệu lên link này
+              </button>
+              <button type="button" class="btn btn-xs btn-outline" onclick="saveAndConnectCloudDb(false)">
+                🔄 Tải dữ liệu từ link này về
+              </button>
+              <button type="button" class="btn btn-xs btn-danger-ghost" onclick="disconnectCloudDb()">
+                Ngắt Cloud
+              </button>
+            </div>
           </details>
         </div>
 
