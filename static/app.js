@@ -878,7 +878,7 @@ function renderPosTab() {
   }
 
   if (STATE.recipes.length === 0) {
-    tbody.innerHTML = `<tr><td colspan="4" class="text-center muted" style="padding:24px;">Chưa có bánh nào trong danh sách. Hãy tạo bánh ở mục "Công thức & Giá vốn" hoặc bấm "+ Thêm món phụ".</td></tr>`;
+    tbody.innerHTML = `<tr class="pos-empty-row"><td class="text-center muted" style="padding:24px; display:block;">Chưa có bánh nào trong danh sách. Hãy tạo bánh ở mục "Công thức & Giá vốn" hoặc bấm "+ Thêm món phụ".</td></tr>`;
   } else {
     tbody.innerHTML = STATE.recipes
       .map((r) => {
@@ -894,34 +894,41 @@ function renderPosTab() {
 
         return `
         <tr class="pos-item-row" onclick="togglePosRow(event, this)" data-recipe-id="${r.id}" data-name="${escapeHtml(r.name)}" data-unit="${escapeHtml(r.yield_unit)}" data-unit-cost="${unitCost}">
-          <td data-label="Tên bánh" class="pos-cell-main">
+          <td class="pos-cell-main">
             <div class="pos-cake-cell">
               ${imgHtml}
               <div class="pos-cake-info">
                 <div class="pos-cake-title-line">
                   <strong class="pos-cake-name">${escapeHtml(r.name)}</strong>
+                  <span class="pos-unit-price-tag">${formatVND(unitPrice)}</span>
                   <span class="pos-selected-tag">✓ Đã chọn</span>
                 </div>
                 <div class="pos-baked-status">
-                  <span class="pos-baked-pill ${pillClass}">🧁 Còn lại: <strong>${formatNum(remaining)}</strong></span>
-                  <span class="pos-baked-pill meta-pill">Đã làm: <strong>${formatNum(bakedToday)}</strong></span>
-                  ${soldToday > 0 ? `<span class="pos-baked-pill meta-pill">Đã bán: <strong>${formatNum(soldToday)}</strong></span>` : ""}
+                  <span class="pos-baked-pill ${pillClass}">🧁 Còn: <strong>${formatNum(remaining)}</strong></span>
+                  <span class="pos-baked-pill meta-pill">Làm: <strong>${formatNum(bakedToday)}</strong>${soldToday > 0 ? ` • Bán: <strong>${formatNum(soldToday)}</strong>` : ""}</span>
                 </div>
               </div>
             </div>
           </td>
-          <td data-label="Giá bán (đ)" class="text-right">
-            <input type="number" class="pos-price-input" value="${unitPrice}" min="0" step="1000" oninput="updatePosSummary()" />
-          </td>
-          <td data-label="Số lượng" class="text-center">
-            <div class="pos-qty-box">
-              <button type="button" class="pos-qty-btn" onclick="stepPosQty(event, this, -1)">−</button>
-              <input type="number" class="pos-qty-input" value="1" min="0.5" step="1" oninput="onPosQtyInput(this)" />
-              <button type="button" class="pos-qty-btn" onclick="stepPosQty(event, this, 1)">+</button>
+          <td class="pos-cell-controls">
+            <div class="pos-controls-top">
+              <div class="pos-ctrl-box">
+                <span class="pos-ctrl-label">Giá (đ)</span>
+                <input type="number" class="pos-price-input" value="${unitPrice}" min="0" step="1000" oninput="updatePosSummary()" />
+              </div>
+              <div class="pos-ctrl-box">
+                <span class="pos-ctrl-label">Số lượng</span>
+                <div class="pos-qty-box">
+                  <button type="button" class="pos-qty-btn" onclick="stepPosQty(event, this, -1)">−</button>
+                  <input type="number" class="pos-qty-input" value="1" min="0.5" step="1" oninput="onPosQtyInput(this)" />
+                  <button type="button" class="pos-qty-btn" onclick="stepPosQty(event, this, 1)">+</button>
+                </div>
+              </div>
             </div>
-          </td>
-          <td data-label="Thành tiền" class="text-right nowrap-cell">
-            <strong class="pos-line-total">0 đ</strong>
+            <div class="pos-controls-bottom">
+              <span class="pos-total-label">Thành tiền:</span>
+              <strong class="pos-line-total">0 đ</strong>
+            </div>
           </td>
         </tr>
       `;
@@ -996,24 +1003,32 @@ function addCustomPosRow() {
   tr.dataset.unitCost = "0";
   tr.setAttribute("onclick", "togglePosRow(event, this)");
   tr.innerHTML = `
-    <td data-label="Món phụ" class="pos-cell-main">
+    <td class="pos-cell-main">
       <div style="display:flex; align-items:center; gap:8px; flex-wrap:wrap;">
-        <input type="text" class="form-control custom-pos-name" placeholder="Nhập tên món phụ (VD: Nến sinh nhật, Hộp quà...)" oninput="updatePosSummary()" style="padding:6px 10px; font-size:13.5px; flex:1; min-width:140px;" />
+        <input type="text" class="form-control custom-pos-name" placeholder="Nhập tên món phụ (VD: Nến, Hộp quà...)" oninput="updatePosSummary()" style="padding:6px 10px; font-size:13.5px; flex:1; min-width:140px;" />
+        <span class="pos-unit-price-tag">15.000 đ</span>
         <span class="pos-selected-tag">✓ Đã chọn</span>
       </div>
     </td>
-    <td data-label="Giá bán (đ)" class="text-right">
-      <input type="number" class="pos-price-input" value="15000" min="0" step="1000" oninput="updatePosSummary()" />
-    </td>
-    <td data-label="Số lượng" class="text-center">
-      <div class="pos-qty-box">
-        <button type="button" class="pos-qty-btn" onclick="stepPosQty(event, this, -1)">−</button>
-        <input type="number" class="pos-qty-input" value="1" min="1" step="1" oninput="onPosQtyInput(this)" />
-        <button type="button" class="pos-qty-btn" onclick="stepPosQty(event, this, 1)">+</button>
+    <td class="pos-cell-controls">
+      <div class="pos-controls-top">
+        <div class="pos-ctrl-box">
+          <span class="pos-ctrl-label">Giá (đ)</span>
+          <input type="number" class="pos-price-input" value="15000" min="0" step="1000" oninput="updatePosSummary()" />
+        </div>
+        <div class="pos-ctrl-box">
+          <span class="pos-ctrl-label">Số lượng</span>
+          <div class="pos-qty-box">
+            <button type="button" class="pos-qty-btn" onclick="stepPosQty(event, this, -1)">−</button>
+            <input type="number" class="pos-qty-input" value="1" min="1" step="1" oninput="onPosQtyInput(this)" />
+            <button type="button" class="pos-qty-btn" onclick="stepPosQty(event, this, 1)">+</button>
+          </div>
+        </div>
       </div>
-    </td>
-    <td data-label="Thành tiền" class="text-right">
-      <strong class="pos-line-total">15.000 đ</strong>
+      <div class="pos-controls-bottom">
+        <span class="pos-total-label">Thành tiền:</span>
+        <strong class="pos-line-total">15.000 đ</strong>
+      </div>
     </td>
   `;
   tbody.appendChild(tr);
@@ -1046,6 +1061,8 @@ function collectPosItems() {
     const qty = parseFloat(row.querySelector(".pos-qty-input")?.value) || 0;
     const price = parseFloat(row.querySelector(".pos-price-input")?.value) || 0;
     const lineTotalEl = row.querySelector(".pos-line-total");
+    const priceTagEl = row.querySelector(".pos-unit-price-tag");
+    if (priceTagEl) priceTagEl.textContent = formatVND(price);
 
     if (isSelected && qty > 0) {
       const lineTotal = Math.round(qty * price);
@@ -1575,12 +1592,14 @@ function renderBakePreview() {
 
       return `
       <tr>
-        <td data-label="Nguyên liệu" class="card-cell-header"><strong>${escapeHtml(it.ingredient_name)}</strong></td>
-        <td data-label="Định lượng cần trừ" class="text-right nowrap-cell">
+        <td data-label="Nguyên liệu" class="card-cell-header">
+          <strong>${escapeHtml(it.ingredient_name)}</strong>
+          <div class="muted" style="font-size:11.5px;">Kho có: ${formatDualStock(currentStock, sUnit)}</div>
+        </td>
+        <td data-label="Định lượng trừ" class="text-right nowrap-cell">
           <strong class="text-danger">-${formatNum(neededInRecipeUnit)} ${escapeHtml(rUnit)}</strong>
           ${convLabel}
         </td>
-        <td data-label="Kho hiện có" class="text-right nowrap-cell">${formatDualStock(currentStock, sUnit)}</td>
         <td data-label="Kho còn lại" class="text-right nowrap-cell">
           ${
             isShort
@@ -1599,10 +1618,9 @@ function renderBakePreview() {
       <table class="data-table responsive-card-table">
         <thead>
           <tr>
-            <th>Nguyên liệu</th>
-            <th class="text-right" style="white-space:nowrap;">Định lượng trừ</th>
-            <th class="text-right" style="white-space:nowrap;">Kho hiện có</th>
-            <th class="text-right" style="white-space:nowrap;">Kho còn lại</th>
+            <th>Nguyên liệu &amp; Tồn kho</th>
+            <th class="text-right" style="white-space:nowrap;">Lượng trừ</th>
+            <th class="text-right" style="white-space:nowrap;">Sau khi trừ</th>
             <th class="text-right" style="white-space:nowrap;">Giá vốn</th>
           </tr>
         </thead>

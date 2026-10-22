@@ -149,10 +149,13 @@
         </div>
 
         <div class="pos-layout">
-          <!-- Left: Cake Selection Table -->
+          <!-- Left: Cake Selection List (Compact, No Horizontal Scroll) -->
           <div class="card pos-menu-card">
             <div class="pos-card-header">
-              <h2>1. Bấm chọn bánh khách mua</h2>
+              <div>
+                <h2>1. Bấm chọn bánh khách mua</h2>
+                <p class="muted" style="font-size: 12.5px; margin-top: 2px;">Chạm vào thẻ bánh để chọn • Đủ thông tin Giá bán &amp; Số bánh còn ngay trên 1 dòng</p>
+              </div>
               <button class="btn btn-sm btn-secondary" onclick="addCustomPosRow()">+ Thêm món phụ / Phụ kiện</button>
             </div>
 
@@ -160,16 +163,8 @@
               <input type="text" id="pos-search-input" class="form-control" placeholder="🔍 Tìm nhanh tên bánh..." oninput="filterPosRows()" />
             </div>
 
-            <div class="table-responsive">
+            <div class="pos-cake-list-wrap">
               <table class="data-table pos-cake-table">
-                <thead>
-                  <tr>
-                    <th>Tên bánh & Số bánh còn trong ngày</th>
-                    <th class="text-right" style="width: 112px; white-space: nowrap;">Giá bán (đ)</th>
-                    <th class="text-center" style="width: 118px; white-space: nowrap;">Số lượng</th>
-                    <th class="text-right" style="width: 105px; white-space: nowrap;">Thành tiền</th>
-                  </tr>
-                </thead>
                 <tbody id="pos-cakes-tbody"></tbody>
               </table>
             </div>
@@ -177,20 +172,22 @@
 
           <!-- Right: Customer Info & Bill Checkout -->
           <div class="card pos-checkout-card">
-            <h2>2. Thông tin khách mua & Xuất Bill</h2>
+            <h2>2. Thông tin khách mua &amp; Xuất Bill</h2>
 
-            <div class="form-group mt-12">
-              <label>👤 Tên khách hàng</label>
-              <input type="text" id="pos-customer-name" class="form-control" placeholder="Nhập tên khách (Mặc định: Khách lẻ)" list="customer-suggestions" oninput="onCustomerNameInput()" />
-              <datalist id="customer-suggestions"></datalist>
-            </div>
-
-            <div class="form-row">
+            <div class="form-row mt-12">
+              <div class="form-group">
+                <label>👤 Tên khách hàng</label>
+                <input type="text" id="pos-customer-name" class="form-control" placeholder="Mặc định: Khách lẻ" list="customer-suggestions" oninput="onCustomerNameInput()" />
+                <datalist id="customer-suggestions"></datalist>
+              </div>
               <div class="form-group">
                 <label>📞 Số điện thoại</label>
                 <input type="tel" id="pos-customer-phone" class="form-control" placeholder="VD: 0909123456" />
               </div>
-              <div class="form-group">
+            </div>
+
+            <div class="form-row">
+              <div class="form-group" style="flex: 0 1 155px;">
                 <label>💳 Thanh toán</label>
                 <select id="pos-payment-method" class="form-control">
                   <option value="Tiền mặt">💵 Tiền mặt</option>
@@ -198,11 +195,10 @@
                   <option value="Ship COD">🛵 Ship COD</option>
                 </select>
               </div>
-            </div>
-
-            <div class="form-group">
-              <label>📝 Ghi chú in lên Bill / Địa chỉ giao</label>
-              <input type="text" id="pos-customer-note" class="form-control" placeholder="VD: Giao lúc 16h, ghi chữ Chúc Mừng Sinh Nhật..." />
+              <div class="form-group" style="flex: 1 1 180px;">
+                <label>📝 Ghi chú Bill / Địa chỉ giao</label>
+                <input type="text" id="pos-customer-note" class="form-control" placeholder="VD: Giao 16h, ghi chữ Sinh Nhật..." />
+              </div>
             </div>
 
             <div class="form-row">
@@ -240,7 +236,7 @@
 
             <div class="pos-action-buttons">
               <button class="btn btn-primary btn-lg btn-block" onclick="submitPosOrder(true)">
-                🖨️ Lưu Đơn & In Bill Giấy Ngay
+                🖨️ Lưu Đơn &amp; In Bill Giấy Ngay
               </button>
               <div class="form-row" style="margin-top: 8px;">
                 <button class="btn btn-secondary flex-1" onclick="submitPosOrder(false)">
