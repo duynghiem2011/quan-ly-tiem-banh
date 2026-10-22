@@ -2267,3 +2267,299 @@ button, input, select, textarea {
   }
 }
 
+/* ==================== MULTI-CAKE BAKE & PERIOD FILTER & CUSTOMER DB ==================== */
+.bake-recipes-list {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  max-height: 620px;
+  overflow-y: auto;
+  padding-right: 4px;
+}
+
+.bake-recipe-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 12px 14px;
+  background: var(--surface);
+  border: 1.5px solid var(--border);
+  border-radius: var(--radius-sm);
+  transition: all 0.2s ease;
+}
+
+.bake-recipe-row:hover {
+  border-color: var(--primary);
+  background: #fbfdff;
+}
+
+.bake-recipe-row.is-selected {
+  border-color: #2d8a61;
+  background: #f0fdf4;
+  box-shadow: 0 2px 8px rgba(45, 138, 97, 0.08);
+}
+
+.bake-cake-info {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex: 1;
+  min-width: 0;
+}
+
+.bake-cake-thumb {
+  width: 48px;
+  height: 48px;
+  border-radius: 10px;
+  object-fit: cover;
+  border: 1px solid var(--border);
+  flex-shrink: 0;
+  background: var(--surface-alt);
+}
+
+.bake-cake-texts {
+  min-width: 0;
+  flex: 1;
+}
+
+.bake-cake-title {
+  font-weight: 700;
+  font-size: 15px;
+  color: var(--text);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.bake-selected-badge {
+  background: #2d8a61;
+  color: #ffffff;
+  font-size: 11px;
+  font-weight: 700;
+  padding: 2px 7px;
+  border-radius: 999px;
+  display: inline-block;
+}
+
+.bake-cake-sub {
+  font-size: 12px;
+  color: var(--text-muted);
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+  margin-top: 3px;
+}
+
+.bake-stepper-wrap {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 4px;
+  flex-shrink: 0;
+}
+
+.bake-stepper {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.bake-qty-input {
+  width: 58px;
+  text-align: center;
+  font-weight: 800;
+  font-size: 15px;
+  padding: 6px 4px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: #ffffff;
+}
+
+.bake-quick-btns {
+  display: inline-flex;
+  gap: 4px;
+}
+
+.bake-selected-box {
+  background: var(--surface-alt);
+  border-radius: var(--radius-sm);
+  padding: 10px 14px;
+  font-size: 13px;
+  min-height: 42px;
+  border: 1px solid var(--border);
+}
+
+.bake-cake-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  background: #ffffff;
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  padding: 3px 10px;
+  font-size: 12px;
+  margin: 3px 4px 3px 0;
+  box-shadow: 0 1px 3px rgba(0,0,0,0.03);
+}
+
+.bake-cake-chip .chip-remove {
+  cursor: pointer;
+  color: var(--text-muted);
+  font-weight: bold;
+  padding: 0 2px;
+}
+
+.bake-cake-chip .chip-remove:hover {
+  color: var(--danger);
+}
+
+/* Order Period Filter & KPI Bar */
+.order-filter-bar {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  margin-bottom: 16px;
+  background: #f8fafc;
+  padding: 12px 14px;
+  border-radius: var(--radius-sm);
+  border: 1px solid var(--border);
+}
+
+.order-period-pills {
+  display: flex;
+  gap: 6px;
+  flex-wrap: wrap;
+}
+
+.order-filter-inputs {
+  display: flex;
+  gap: 12px;
+  flex-wrap: wrap;
+  align-items: center;
+}
+
+.filter-input-group {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 13px;
+  color: var(--text-muted);
+}
+
+.filter-input-group .form-control {
+  font-size: 13px;
+  padding: 6px 10px;
+  height: auto;
+}
+
+.filter-search-wrap {
+  flex: 1;
+  min-width: 220px;
+}
+
+.order-kpi-bar {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
+  gap: 12px;
+  margin-bottom: 16px;
+}
+
+.order-kpi-card {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  padding: 12px 14px;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.order-kpi-card strong {
+  font-size: 16px;
+  font-weight: 800;
+}
+
+/* Customer Database Styles */
+.customer-stats-bar {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+  gap: 12px;
+  margin-bottom: 16px;
+}
+
+.customer-stat-card {
+  background: var(--surface-alt);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  padding: 12px 14px;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.customer-stat-card strong {
+  font-size: 16px;
+  font-weight: 800;
+}
+
+.cust-cake-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  background: #eff6ff;
+  color: #1d4ed8;
+  border: 1px solid #bfdbfe;
+  border-radius: 999px;
+  padding: 2px 8px;
+  font-size: 12px;
+  margin: 2px 3px 2px 0;
+  white-space: nowrap;
+}
+
+.badge-total-cakes {
+  display: inline-block;
+  background: #f0fdf4;
+  color: #15803d;
+  border: 1px solid #bbf7d0;
+  border-radius: 999px;
+  padding: 3px 10px;
+  font-weight: 700;
+  font-size: 12.5px;
+}
+
+@media (max-width: 768px) {
+  .bake-recipe-row {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 10px;
+  }
+  .bake-stepper-wrap {
+    width: 100%;
+    align-items: stretch;
+  }
+  .bake-stepper {
+    justify-content: space-between;
+    width: 100%;
+  }
+  .bake-qty-input {
+    flex: 1;
+  }
+  .bake-quick-btns {
+    justify-content: flex-end;
+    margin-top: 4px;
+  }
+  .order-filter-inputs {
+    flex-direction: column;
+    align-items: stretch;
+  }
+  .filter-input-group {
+    justify-content: space-between;
+  }
+  .filter-search-wrap {
+    width: 100%;
+  }
+}

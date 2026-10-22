@@ -547,48 +547,100 @@ async function handleVercelLocalPost(path, data) {
   }
 
   if (path === "/api/bake") {
-    const r = st.recipes.find((x) => x.id === Number(data.recipe_id));
-    if (!r) throw new Error("Không tìm thấy công thức.");
-    const batches = Number(data.batches) || 1;
-    const details = [];
-    let totalCost = 0;
+    const rawItems = Array.isArray(data.items) && data.items.length > 0
+      ? data.items
+      : (data.recipe_id ? [{ recipe_id: data.recipe_id, batches: data.batches }] : []);
 
-    r.items.forEach((it) => {
-      const ing = st.ingredients.find((x) => x.id === Number(it.ingredient_id));
-      if (!ing) return;
-      const rUnit = it.recipe_unit || ing.unit;
-      const factor = convertUnitFactor(rUnit, ing.unit);
-      const neededRec = Number((it.amount * batches).toFixed(2));
-      const neededStock = Number((neededRec * factor).toFixed(5));
-      const newStock = Number(Math.max(0, ing.stock - neededStock).toFixed(4));
-      const actualDeducted = Number((ing.stock - newStock).toFixed(5));
-      ing.stock = newStock;
-      totalCost += neededStock * ing.cost_per_unit;
-      details.push({
-        ingredient_id: ing.id,
-        name: ing.name,
-        change: `-${neededRec}${rUnit} (-${neededStock}${ing.unit})`,
-        raw_delta: -actualDeducted,
-        unit: ""
+    if (rawItems.length === 0) throw new Error("Vui lòng chọn ít nhất 1 loại bánh để làm.");
+
+    const bakePlans = [];
+    const ingNeeds = {};
+
+    rawItems.forEach((it) => {
+      const r = st.recipes.find((x) => x.id === Number(it.recipe_id));
+      if (!r) return;
+      const batches = Math.max(0, Number(it.batches) || 1);
+      const totalYield = Number((batches * (Number(r.yield_qty) || 1)).toFixed(2));
+      bakePlans.push({ recipe: r, batches, yield: totalYield });
+
+      (r.items || []).forEach((ri) => {
+        const ing = st.ingredients.find((x) => x.id === Number(ri.ingredient_id));
+        if (!ing) return;
+        const rUnit = ri.recipe_unit || ing.unit;
+        const sUnit = ing.unit;
+        const factor = convertUnitFactor(rUnit, sUnit);
+        const neededRec = Number((ri.amount * batches).toFixed(2));
+        const neededStock = Number((neededRec * factor).toFixed(5));
+
+        if (!ingNeeds[ing.id]) {
+          ingNeeds[ing.id] = {
+            ing,
+            totalNeededStock: 0,
+            breakdown: []
+          };
+        }
+        ingNeeds[ing.id].totalNeededStock = Number((ingNeeds[ing.id].totalNeededStock + neededStock).toFixed(5));
+        ingNeeds[ing.id].breakdown.push(`${r.name}: -${neededRec}${rUnit}`);
       });
     });
 
-    const totalYield = Number((batches * (Number(r.yield_qty) || 1)).toFixed(2));
-    r.baked_stock = Number(((Number(r.baked_stock) || 0) + totalYield).toFixed(2));
-    const title = `Làm bánh: ${r.name} (${totalYield} ${r.yield_unit})`;
+    if (bakePlans.length === 0) throw new Error("Không tìm thấy công thức bánh hợp lệ.");
+
+    const shortages = [];
+    Object.values(ingNeeds).forEach((item) => {
+      if (item.ing.stock + 1e-9 < item.totalNeededStock) {
+        shortages.push(`${item.ing.name} (cần ${item.totalNeededStock} ${item.ing.unit}, kho còn ${item.ing.stock} ${item.ing.unit})`);
+      }
+    });
+
+    if (shortages.length > 0 && !data.allow_negative) {
+      throw new Error("Không đủ nguyên liệu trong kho để làm bánh:\n- " + shortages.join("\n- "));
+    }
+
+    const details = [];
+    let grandCost = 0;
+
+    Object.values(ingNeeds).forEach((item) => {
+      const ing = item.ing;
+      const neededStock = item.totalNeededStock;
+      const newStock = Number((data.allow_negative ? (ing.stock - neededStock) : Math.max(0, ing.stock - neededStock)).toFixed(4));
+      const actualDeducted = Number((ing.stock - newStock).toFixed(5));
+      grandCost += neededStock * ing.cost_per_unit;
+      ing.stock = newStock;
+
+      details.push({
+        ingredient_id: ing.id,
+        name: ing.name,
+        change: `-${neededStock}${ing.unit} (${item.breakdown.join(" | ")})`,
+        raw_delta: -actualDeducted,
+        unit: ing.unit,
+        after_stock: newStock
+      });
+    });
+
+    const bakedTitles = [];
+    bakePlans.forEach((bp) => {
+      bp.recipe.baked_stock = Number(((Number(bp.recipe.baked_stock) || 0) + bp.yield).toFixed(2));
+      bakedTitles.push(`${bp.recipe.name} (${bp.yield} ${bp.recipe.yield_unit})`);
+    });
+
+    const summaryTitle = `Làm ${bakePlans.length} loại bánh: ` + bakedTitles.join(", ");
+    const finalTitle = data.note ? `${summaryTitle} - ${data.note}` : summaryTitle;
+
     st.transactions.unshift({
       id: Date.now(),
       type: "BAKE",
-      title,
-      total_cost: Math.round(totalCost),
-      recipe_id: r.id,
-      baked_qty: totalYield,
+      title: finalTitle,
+      total_cost: Math.round(grandCost),
+      recipe_id: bakePlans.length === 1 ? bakePlans[0].recipe.id : null,
+      baked_qty: bakePlans.length === 1 ? bakePlans[0].yield : 0,
       created_at: now,
       details
     });
-    pushLocalActivity(st, "BAKE", `${title} — Đã cộng +${totalYield} bánh vào quầy bán & trừ nguyên liệu kho`, now);
+
+    pushLocalActivity(st, "BAKE", `${finalTitle} — Đã cộng bánh vào quầy bán & trừ nguyên liệu kho`, now);
     saveLocalVercelState(st);
-    return { ok: true, title };
+    return { ok: true, title: finalTitle };
   }
 
   if (path === "/api/orders/create") {
@@ -834,6 +886,7 @@ function renderAll(preserveBakeRecipeId) {
   renderBakeTab(preserveBakeRecipeId);
   renderHistory();
   renderActivityLogs();
+  renderCustomerDatabase();
 }
 
 function populateCategoryFilterDropdown() {
@@ -1273,17 +1326,136 @@ async function submitPosOrder(shouldPrint = true) {
   }
 }
 
+let currentOrderPeriod = "today";
+let currentOrderCustomDate = "";
+let currentOrderCustomMonth = "";
+
+function setOrderPeriod(period) {
+  currentOrderPeriod = period;
+  if (period !== "custom-date") {
+    currentOrderCustomDate = "";
+    const dateInput = document.getElementById("order-filter-date");
+    if (dateInput) dateInput.value = "";
+  }
+  if (period !== "custom-month") {
+    currentOrderCustomMonth = "";
+    const monthInput = document.getElementById("order-filter-month");
+    if (monthInput) monthInput.value = "";
+  }
+
+  document.querySelectorAll(".order-period-pills .pill").forEach((btn) => {
+    btn.classList.toggle("active", btn.dataset.operiod === period);
+  });
+
+  renderOrdersHistory();
+}
+
+function setOrderCustomDate(val) {
+  if (!val) {
+    setOrderPeriod("today");
+    return;
+  }
+  currentOrderPeriod = "custom-date";
+  currentOrderCustomDate = val;
+  currentOrderCustomMonth = "";
+  const monthInput = document.getElementById("order-filter-month");
+  if (monthInput) monthInput.value = "";
+
+  document.querySelectorAll(".order-period-pills .pill").forEach((btn) => {
+    btn.classList.remove("active");
+  });
+
+  renderOrdersHistory();
+}
+
+function setOrderCustomMonth(val) {
+  if (!val) {
+    setOrderPeriod("month");
+    return;
+  }
+  currentOrderPeriod = "custom-month";
+  currentOrderCustomMonth = val;
+  currentOrderCustomDate = "";
+  const dateInput = document.getElementById("order-filter-date");
+  if (dateInput) dateInput.value = "";
+
+  document.querySelectorAll(".order-period-pills .pill").forEach((btn) => {
+    btn.classList.remove("active");
+  });
+
+  renderOrdersHistory();
+}
+
+function getFilteredOrders() {
+  const orders = STATE.orders || [];
+  const search = (document.getElementById("order-search-input")?.value || "").toLowerCase().trim();
+  const now = new Date();
+  const pad = (n) => String(n).padStart(2, "0");
+  const todayStr = `${now.getFullYear()}-${pad(now.getMonth() + 1)}-${pad(now.getDate())}`;
+  const thisMonthStr = `${now.getFullYear()}-${pad(now.getMonth() + 1)}`;
+  const thisYearStr = `${now.getFullYear()}`;
+
+  return orders.filter((o) => {
+    const dt = String(o.created_at || "").trim();
+    const orderDate = dt.split(" ")[0] || "";
+    const orderMonth = orderDate.slice(0, 7);
+    const orderYear = orderDate.slice(0, 4);
+
+    if (currentOrderPeriod === "today" && orderDate !== todayStr) return false;
+    if (currentOrderPeriod === "month" && orderMonth !== thisMonthStr) return false;
+    if (currentOrderPeriod === "year" && orderYear !== thisYearStr) return false;
+    if (currentOrderPeriod === "custom-date" && currentOrderCustomDate && orderDate !== currentOrderCustomDate) return false;
+    if (currentOrderPeriod === "custom-month" && currentOrderCustomMonth && orderMonth !== currentOrderCustomMonth) return false;
+
+    if (search) {
+      const matchBill = (o.bill_code || "").toLowerCase().includes(search);
+      const matchCust = (o.customer_name || "").toLowerCase().includes(search);
+      const matchPhone = (o.customer_phone || "").toLowerCase().includes(search);
+      const matchItems = (o.items || []).some((it) => (it.name || "").toLowerCase().includes(search));
+      if (!matchBill && !matchCust && !matchPhone && !matchItems) return false;
+    }
+
+    return true;
+  });
+}
+
 function renderOrdersHistory() {
   const tbody = document.getElementById("orders-history-tbody");
   if (!tbody) return;
-  const orders = STATE.orders || [];
 
-  if (orders.length === 0) {
-    tbody.innerHTML = `<tr><td colspan="7" class="text-center muted" style="padding:24px;">Chưa có đơn hàng nào được bán.</td></tr>`;
+  const filteredOrders = getFilteredOrders();
+
+  // Calculate KPI stats
+  let totalRev = 0;
+  let totalProfit = 0;
+  let totalCakes = 0;
+
+  filteredOrders.forEach((o) => {
+    totalRev += Number(o.total_amount) || 0;
+    totalProfit += (Number(o.total_amount) || 0) - (Number(o.total_cost) || 0);
+    (o.items || []).forEach((it) => {
+      totalCakes += Number(it.qty) || 0;
+    });
+  });
+
+  const countEl = document.getElementById("orders-filtered-count");
+  const revEl = document.getElementById("order-kpi-rev");
+  const profitEl = document.getElementById("order-kpi-profit");
+  const kpiCountEl = document.getElementById("order-kpi-count");
+  const cakesEl = document.getElementById("order-kpi-cakes");
+
+  if (countEl) countEl.textContent = filteredOrders.length;
+  if (revEl) revEl.textContent = formatVND(totalRev);
+  if (profitEl) profitEl.textContent = "+" + formatVND(totalProfit);
+  if (kpiCountEl) kpiCountEl.textContent = `${filteredOrders.length} đơn`;
+  if (cakesEl) cakesEl.textContent = `${formatNum(totalCakes)} cái`;
+
+  if (filteredOrders.length === 0) {
+    tbody.innerHTML = `<tr><td colspan="7" class="text-center muted" style="padding:28px;">Không tìm thấy hóa đơn nào trong khoảng thời gian đã chọn.</td></tr>`;
     return;
   }
 
-  tbody.innerHTML = orders
+  tbody.innerHTML = filteredOrders
     .map((o) => {
       const itemsSummary = (o.items || [])
         .map((it) => `<div>• <strong>${formatNum(it.qty)}</strong> × ${escapeHtml(it.name)} (${formatVND(it.line_total)})</div>`)
@@ -1500,26 +1672,149 @@ async function saveShopSettings() {
   }
 }
 
-/* ==================== 3. BAKE TAB (GRAM -> KG AUTO DEDUCTION) ==================== */
-function renderBakeTab(preserveRecipeId) {
+/* ==================== 3. BAKE TAB (MULTI-CAKE AUTO DEDUCTION) ==================== */
+let BAKE_SELECTIONS = {}; // { [recipeId]: batches }
+
+function clearAllBakeSelections() {
+  BAKE_SELECTIONS = {};
+  renderBakeTab();
+  showToast("🔄 Đã đặt số lượng làm tất cả các bánh về 0.");
+}
+
+function selectAllBake1Batch() {
+  (STATE.recipes || []).forEach((r) => {
+    BAKE_SELECTIONS[r.id] = 1;
+  });
+  renderBakeTab();
+  showToast("🧁 Đã chọn làm 1 mẻ cho tất cả các loại bánh.");
+}
+
+function filterBakeRecipes() {
+  const q = (document.getElementById("bake-search-input")?.value || "").toLowerCase().trim();
+  document.querySelectorAll(".bake-recipe-row").forEach((row) => {
+    const name = row.dataset.name || "";
+    row.style.display = !q || name.includes(q) ? "" : "none";
+  });
+}
+
+function stepBakeQty(recipeId, delta) {
+  const current = BAKE_SELECTIONS[recipeId] || 0;
+  const next = Math.max(0, Math.round((current + delta) * 10) / 10);
+  if (next <= 0) {
+    delete BAKE_SELECTIONS[recipeId];
+  } else {
+    BAKE_SELECTIONS[recipeId] = next;
+  }
+  renderBakeTab();
+}
+
+function setBakeQty(recipeId, val) {
+  const next = Math.max(0, parseFloat(val) || 0);
+  if (next <= 0) {
+    delete BAKE_SELECTIONS[recipeId];
+  } else {
+    BAKE_SELECTIONS[recipeId] = next;
+  }
+  renderBakeTab();
+}
+
+function removeBakeSelection(recipeId) {
+  delete BAKE_SELECTIONS[recipeId];
+  renderBakeTab();
+}
+
+function jumpToBake(recipeId) {
+  switchTab("bake");
+  BAKE_SELECTIONS = { [Number(recipeId)]: 1 };
+  renderBakeTab();
+  const searchInput = document.getElementById("bake-search-input");
+  if (searchInput) searchInput.value = "";
+  const el = document.getElementById(`bake-row-${recipeId}`);
+  if (el) el.scrollIntoView({ behavior: "smooth", block: "center" });
+}
+
+function renderBakeTab() {
   renderBakeDailySummary();
-  const select = document.getElementById("bake-recipe-select");
-  if (STATE.recipes.length === 0) {
-    select.innerHTML = `<option value="">-- Chưa có công thức bánh --</option>`;
-    document.getElementById("bake-ingredients-preview").innerHTML = `<p class="muted">Vui lòng thêm công thức bánh ở mục Công thức.</p>`;
+  const listEl = document.getElementById("bake-recipes-list");
+  if (!listEl) return;
+
+  const recipes = STATE.recipes || [];
+  if (recipes.length === 0) {
+    listEl.innerHTML = `<p class="muted text-center" style="padding: 24px;">Chưa có công thức bánh nào. Vui lòng tạo công thức ở mục "Công thức".</p>`;
+    renderBakePreview();
     return;
   }
 
-  const currentVal = preserveRecipeId || select.value || STATE.recipes[0].id;
-  select.innerHTML = STATE.recipes
-    .map(
-      (r) =>
-        `<option value="${r.id}" ${String(r.id) === String(currentVal) ? "selected" : ""}>
-          ${escapeHtml(r.name)} (1 mẻ = ${r.yield_qty} ${escapeHtml(r.yield_unit)} • Giá bán 1 ${escapeHtml(r.yield_unit)}: ${formatVND(r.selling_price)})
-        </option>`
-    )
+  const q = (document.getElementById("bake-search-input")?.value || "").toLowerCase().trim();
+
+  listEl.innerHTML = recipes
+    .map((r) => {
+      const batches = BAKE_SELECTIONS[r.id] || 0;
+      const isSelected = batches > 0;
+      const unit = escapeHtml(r.yield_unit || "bánh");
+      const yieldQty = Number(r.yield_qty) || 1;
+      const totalYield = Math.round(batches * yieldQty * 10) / 10;
+      const imgUrl = getRecipeImageUrl(r);
+      const imgHtml = imgUrl
+        ? `<img src="${escapeHtml(imgUrl)}" alt="${escapeHtml(r.name)}" class="bake-cake-thumb" />`
+        : `<div class="bake-cake-thumb" style="display:flex; align-items:center; justify-content:center; font-size:22px;">🧁</div>`;
+
+      const unitCost = r.cost_per_cake || (r.total_cost && yieldQty ? r.total_cost / yieldQty : 0);
+      const sellPrice = Number(r.selling_price) || 0;
+      const remStock = Number(r.remaining_today !== undefined ? r.remaining_today : r.baked_stock) || 0;
+
+      let subYieldInfo = `1 mẻ = ${yieldQty} ${unit}`;
+      if (r.cake_weight_gram > 0) subYieldInfo += ` (${formatNum(r.cake_weight_gram)}g/${unit})`;
+
+      let selectedSubText = "";
+      if (isSelected) {
+        selectedSubText = `<div style="font-size:12px; color:#2d8a61; font-weight:700; margin-top:3px;">👉 Đang chọn: ${formatNum(batches)} mẻ (= ${formatNum(totalYield)} ${unit}) • Vốn mẻ: ${formatVND(batches * (r.total_cost || 0))}</div>`;
+      }
+
+      return `
+      <div class="bake-recipe-row ${isSelected ? "is-selected" : ""}" id="bake-row-${r.id}" data-name="${escapeHtml(r.name.toLowerCase())}">
+        <div class="bake-cake-info">
+          ${imgHtml}
+          <div class="bake-cake-texts">
+            <div class="bake-cake-title">
+              <span>${escapeHtml(r.name)}</span>
+              ${isSelected ? `<span class="bake-selected-badge">✓ Làm ${formatNum(batches)} mẻ</span>` : ""}
+            </div>
+            <div class="bake-cake-sub">
+              <span>📋 ${subYieldInfo}</span>
+              <span>💰 Giá bán: <strong>${formatVND(sellPrice)}</strong></span>
+              <span>📦 Còn trên quầy: <strong>${formatNum(remStock)}</strong> ${unit}</span>
+            </div>
+            ${selectedSubText}
+          </div>
+        </div>
+
+        <div class="bake-stepper-wrap">
+          <div class="bake-stepper">
+            <button type="button" class="btn-step" onclick="stepBakeQty(${r.id}, -1)" title="Giảm 1 mẻ">−1</button>
+            <input
+              type="number"
+              class="bake-qty-input"
+              min="0"
+              step="0.5"
+              value="${batches > 0 ? batches : 0}"
+              onchange="setBakeQty(${r.id}, this.value)"
+              title="Nhập số mẻ làm"
+            />
+            <button type="button" class="btn-step" onclick="stepBakeQty(${r.id}, 1)" title="Tăng 1 mẻ">+1</button>
+          </div>
+          <div class="bake-quick-btns">
+            <button type="button" class="btn btn-xs btn-outline" onclick="stepBakeQty(${r.id}, 1)">+1 mẻ</button>
+            <button type="button" class="btn btn-xs btn-secondary" onclick="stepBakeQty(${r.id}, 5)">+5 mẻ</button>
+            <button type="button" class="btn btn-xs btn-danger" onclick="setBakeQty(${r.id}, 0)" ${batches <= 0 ? "disabled" : ""}>Về 0</button>
+          </div>
+        </div>
+      </div>
+    `;
+    })
     .join("");
 
+  if (q) filterBakeRecipes();
   renderBakePreview();
 }
 
@@ -1638,133 +1933,229 @@ async function setDailyBaked(recipeId, val) {
   }
 }
 
-function adjustBakeBatches(delta) {
-  const input = document.getElementById("bake-batches-input");
-  let val = parseFloat(input.value) || 1;
-  val = Math.max(0.5, Math.round((val + delta) * 10) / 10);
-  input.value = val;
-  renderBakePreview();
-}
-
 function renderBakePreview() {
-  const recipeId = Number(document.getElementById("bake-recipe-select").value);
-  const batches = Math.max(0.01, parseFloat(document.getElementById("bake-batches-input").value) || 1);
-  const recipe = STATE.recipes.find((r) => r.id === recipeId);
+  const summaryBox = document.getElementById("bake-selected-summary-box");
   const previewEl = document.getElementById("bake-ingredients-preview");
   const warningEl = document.getElementById("bake-shortage-warning");
+  const shortageListEl = document.getElementById("bake-shortage-list");
+  const submitBtn = document.getElementById("btn-submit-bake");
 
-  if (!recipe) {
-    previewEl.innerHTML = "";
-    warningEl.classList.add("hidden");
+  const selectedEntries = Object.entries(BAKE_SELECTIONS).filter(([id, b]) => Number(b) > 0);
+
+  if (selectedEntries.length === 0) {
+    if (summaryBox) {
+      summaryBox.innerHTML = `<span class="muted">Chưa chọn loại bánh nào. Hãy bấm <strong>+1</strong> ở danh sách bên trái để chọn bánh bạn làm hôm nay.</span>`;
+    }
+    if (previewEl) {
+      previewEl.innerHTML = `<p class="muted text-center" style="padding: 20px;">Nguyên liệu cần trừ sẽ hiển thị tự động khi bạn chọn bánh bên trái.</p>`;
+    }
+    if (warningEl) warningEl.classList.add("hidden");
+    if (submitBtn) {
+      submitBtn.disabled = true;
+      submitBtn.textContent = "🧁 Hãy chọn ít nhất 1 loại bánh để làm";
+    }
+
+    const cakesCountEl = document.getElementById("bake-total-cakes-count");
+    const totalCostEl = document.getElementById("bake-total-cost");
+    const expectedRevEl = document.getElementById("bake-expected-rev");
+    const expectedProfitEl = document.getElementById("bake-expected-profit");
+
+    if (cakesCountEl) cakesCountEl.textContent = "0 cái (0 loại bánh)";
+    if (totalCostEl) totalCostEl.textContent = "0 đ";
+    if (expectedRevEl) expectedRevEl.textContent = "0 đ";
+    if (expectedProfitEl) expectedProfitEl.textContent = "0 đ";
     return;
   }
 
-  const totalCakes = batches * recipe.yield_qty;
-  const weightNote = recipe.cake_weight_gram > 0 ? ` (${formatNum(recipe.cake_weight_gram)}g/${recipe.yield_unit})` : "";
-  document.getElementById("bake-yield-label").textContent = `Thành phẩm thu được: ${formatNum(totalCakes)} ${recipe.yield_unit}${weightNote}`;
+  // Build bake plans
+  const bakePlans = [];
+  let totalAllCakes = 0;
+  let totalGrandCost = 0;
+  let totalExpectedRev = 0;
 
-  const totalCost = recipe.total_cost * batches;
-  const unitCost = recipe.cost_per_cake || 0;
-  // selling_price is price per 1 cake!
-  const expectedRev = (recipe.selling_price || 0) * totalCakes;
-  const expectedProfit = expectedRev - totalCost;
+  selectedEntries.forEach(([recId, batches]) => {
+    const r = STATE.recipes.find((x) => x.id === Number(recId));
+    if (!r) return;
+    const b = Number(batches);
+    const yieldQty = Number(r.yield_qty) || 1;
+    const cakes = Math.round(b * yieldQty * 10) / 10;
+    const cost = (r.total_cost || 0) * b;
+    const rev = (r.selling_price || 0) * cakes;
 
-  document.getElementById("bake-total-cost").textContent = formatVND(totalCost);
-  document.getElementById("bake-unit-cost").textContent = `${formatVND(unitCost)} / 1 ${recipe.yield_unit}`;
-  document.getElementById("bake-expected-rev").textContent =
-    recipe.selling_price > 0 ? `${formatVND(expectedRev)} (${formatNum(totalCakes)} × ${formatVND(recipe.selling_price)})` : "Chưa đặt giá bán";
-  document.getElementById("bake-expected-profit").textContent = recipe.selling_price > 0 ? formatVND(expectedProfit) : "—";
+    totalAllCakes += cakes;
+    totalGrandCost += cost;
+    totalExpectedRev += rev;
 
-  let hasShortage = false;
+    bakePlans.push({
+      recipe: r,
+      batches: b,
+      cakes,
+      cost,
+      rev
+    });
+  });
 
-  const rowsHtml = recipe.items
-    .map((it) => {
-      const rUnit = it.recipe_unit || it.ingredient_unit;
-      const sUnit = it.ingredient_unit;
+  const totalExpectedProfit = totalExpectedRev - totalGrandCost;
+
+  // Render selected chips
+  if (summaryBox) {
+    const chipsHtml = bakePlans
+      .map(
+        (bp) => `
+        <span class="bake-cake-chip">
+          <strong>🧁 ${escapeHtml(bp.recipe.name)}</strong>: ${formatNum(bp.batches)} mẻ (= ${formatNum(bp.cakes)} ${escapeHtml(bp.recipe.yield_unit)})
+          <span class="chip-remove" onclick="removeBakeSelection(${bp.recipe.id})" title="Bỏ chọn bánh này">✕</span>
+        </span>
+      `
+      )
+      .join("");
+    summaryBox.innerHTML = `<div><strong>Đã chọn (${bakePlans.length} loại bánh):</strong></div><div style="margin-top:6px;">${chipsHtml}</div>`;
+  }
+
+  // Update cost summary
+  const cakesCountEl = document.getElementById("bake-total-cakes-count");
+  const totalCostEl = document.getElementById("bake-total-cost");
+  const expectedRevEl = document.getElementById("bake-expected-rev");
+  const expectedProfitEl = document.getElementById("bake-expected-profit");
+
+  if (cakesCountEl) cakesCountEl.textContent = `${formatNum(totalAllCakes)} cái (${bakePlans.length} loại bánh)`;
+  if (totalCostEl) totalCostEl.textContent = formatVND(totalGrandCost);
+  if (expectedRevEl) expectedRevEl.textContent = formatVND(totalExpectedRev);
+  if (expectedProfitEl) expectedProfitEl.textContent = "+" + formatVND(totalExpectedProfit);
+
+  // Aggregate ingredients
+  const ingNeeds = {};
+  bakePlans.forEach((bp) => {
+    (bp.recipe.items || []).forEach((it) => {
+      const ingId = it.ingredient_id;
+      const ing = STATE.ingredients.find((x) => x.id === ingId);
+      const rUnit = it.recipe_unit || (ing ? ing.unit : "g");
+      const sUnit = ing ? ing.unit : rUnit;
       const factor = convertUnitFactor(rUnit, sUnit);
 
-      const neededInRecipeUnit = it.amount * batches;
-      const neededInStockUnit = neededInRecipeUnit * factor;
-      const currentStock = it.ingredient_stock;
-      const remainingStock = currentStock - neededInStockUnit;
-      const isShort = remainingStock < -1e-9;
-      if (isShort) hasShortage = true;
+      const neededRec = it.amount * bp.batches;
+      const neededStock = neededRec * factor;
+      const curStock = ing ? ing.stock : (it.ingredient_stock || 0);
+      const costPerUnit = ing ? ing.cost_per_unit : (it.cost_per_unit || 0);
 
-      const convLabel =
-        rUnit.toLowerCase() !== sUnit.toLowerCase()
-          ? `<div class="muted" style="font-size:11.5px; white-space:nowrap;">(= -${formatNum(neededInStockUnit)} ${escapeHtml(sUnit)} kho)</div>`
-          : "";
+      if (!ingNeeds[ingId]) {
+        ingNeeds[ingId] = {
+          name: it.ingredient_name || (ing ? ing.name : ""),
+          stock_unit: sUnit,
+          cur_stock: curStock,
+          cost_per_unit: costPerUnit,
+          total_stock_needed: 0,
+          breakdown: []
+        };
+      }
+
+      ingNeeds[ingId].total_stock_needed += neededStock;
+      ingNeeds[ingId].breakdown.push(`${bp.recipe.name}: -${formatNum(neededRec)} ${rUnit}`);
+    });
+  });
+
+  const ingList = Object.values(ingNeeds);
+  const shortages = [];
+
+  const rowsHtml = ingList
+    .map((item) => {
+      const remainingStock = item.cur_stock - item.total_stock_needed;
+      const isShort = remainingStock < -1e-9;
+      if (isShort) {
+        shortages.push(
+          `${item.name} (cần ${formatNum(item.total_stock_needed)} ${item.stock_unit}, kho chỉ còn ${formatNum(item.cur_stock)} ${item.stock_unit})`
+        );
+      }
+
+      const breakdownStr = item.breakdown.length > 1 ? `<div class="muted" style="font-size:11px;">Gộp: ${escapeHtml(item.breakdown.join(" | "))}</div>` : "";
 
       return `
       <tr>
-        <td data-label="Nguyên liệu" class="card-cell-header">
-          <strong>${escapeHtml(it.ingredient_name)}</strong>
-          <div class="muted" style="font-size:11.5px;">Kho có: ${formatDualStock(currentStock, sUnit)}</div>
+        <td data-label="Nguyên liệu & Tồn kho" class="card-cell-header">
+          <strong>${escapeHtml(item.name)}</strong>
+          <div class="muted" style="font-size:11.5px;">Kho hiện có: ${formatDualStock(item.cur_stock, item.stock_unit)}</div>
         </td>
-        <td data-label="Định lượng trừ" class="text-right nowrap-cell">
-          <strong class="text-danger">-${formatNum(neededInRecipeUnit)} ${escapeHtml(rUnit)}</strong>
-          ${convLabel}
+        <td data-label="Lượng trừ" class="text-right nowrap-cell">
+          <strong class="text-danger">-${formatNum(item.total_stock_needed)} ${escapeHtml(item.stock_unit)}</strong>
+          ${breakdownStr}
         </td>
-        <td data-label="Kho còn lại" class="text-right nowrap-cell">
+        <td data-label="Sau khi trừ" class="text-right nowrap-cell">
           ${
             isShort
-              ? `<span class="stock-pill stock-out">Thiếu ${formatNum(Math.abs(remainingStock))} ${escapeHtml(sUnit)}</span>`
-              : `<span class="stock-pill stock-ok">Còn ${formatNum(remainingStock)} ${escapeHtml(sUnit)}</span>`
+              ? `<span class="stock-pill stock-out">Thiếu ${formatNum(Math.abs(remainingStock))} ${escapeHtml(item.stock_unit)}</span>`
+              : `<span class="stock-pill stock-ok">Còn ${formatNum(remainingStock)} ${escapeHtml(item.stock_unit)}</span>`
           }
         </td>
-        <td data-label="Giá vốn" class="text-right muted nowrap-cell">${formatVND(neededInStockUnit * it.cost_per_unit)}</td>
+        <td data-label="Giá vốn" class="text-right muted nowrap-cell">${formatVND(item.total_stock_needed * item.cost_per_unit)}</td>
       </tr>
     `;
     })
     .join("");
 
-  previewEl.innerHTML = `
-    <div class="table-responsive">
-      <table class="data-table responsive-card-table">
-        <thead>
-          <tr>
-            <th>Nguyên liệu &amp; Tồn kho</th>
-            <th class="text-right" style="white-space:nowrap;">Lượng trừ</th>
-            <th class="text-right" style="white-space:nowrap;">Sau khi trừ</th>
-            <th class="text-right" style="white-space:nowrap;">Giá vốn</th>
-          </tr>
-        </thead>
-        <tbody>${rowsHtml}</tbody>
-      </table>
-    </div>
-  `;
+  if (previewEl) {
+    previewEl.innerHTML = `
+      <div class="table-responsive">
+        <table class="data-table responsive-card-table">
+          <thead>
+            <tr>
+              <th>Nguyên liệu &amp; Tồn kho</th>
+              <th class="text-right" style="white-space:nowrap;">Tổng lượng trừ</th>
+              <th class="text-right" style="white-space:nowrap;">Sau khi trừ</th>
+              <th class="text-right" style="white-space:nowrap;">Giá vốn</th>
+            </tr>
+          </thead>
+          <tbody>${rowsHtml}</tbody>
+        </table>
+      </div>
+    `;
+  }
 
-  warningEl.classList.toggle("hidden", !hasShortage);
-}
+  // Shortage warning
+  if (warningEl) {
+    if (shortages.length > 0) {
+      warningEl.classList.remove("hidden");
+      if (shortageListEl) {
+        shortageListEl.innerHTML = shortages.map((s) => `<div>• ${escapeHtml(s)}</div>`).join("");
+      }
+    } else {
+      warningEl.classList.add("hidden");
+    }
+  }
 
-function jumpToBake(recipeId) {
-  switchTab("bake");
-  const select = document.getElementById("bake-recipe-select");
-  select.value = String(recipeId);
-  document.getElementById("bake-batches-input").value = 1;
-  renderBakePreview();
+  if (submitBtn) {
+    submitBtn.disabled = false;
+    submitBtn.textContent = `🧁 Xác nhận Làm ${bakePlans.length} loại bánh (${formatNum(totalAllCakes)} cái) & Trừ Kho`;
+  }
 }
 
 async function submitBake() {
-  const recipeId = Number(document.getElementById("bake-recipe-select").value);
-  const batches = parseFloat(document.getElementById("bake-batches-input").value) || 0;
-  const note = document.getElementById("bake-note-input").value.trim();
-  const allowNegative = document.getElementById("bake-allow-negative").checked;
-
-  if (!recipeId || batches <= 0) {
-    return showToast("Vui lòng chọn bánh và nhập số mẻ hợp lệ.", true);
+  const selectedEntries = Object.entries(BAKE_SELECTIONS).filter(([id, b]) => Number(b) > 0);
+  if (selectedEntries.length === 0) {
+    return showToast("Vui lòng chọn ít nhất 1 loại bánh với số lượng > 0.", true);
   }
+
+  const items = selectedEntries.map(([recipe_id, batches]) => ({
+    recipe_id: Number(recipe_id),
+    batches: Number(batches)
+  }));
+
+  const note = (document.getElementById("bake-note-input")?.value || "").trim();
+  const allowNegative = document.getElementById("bake-allow-negative")?.checked || false;
 
   try {
     const res = await apiPost("/api/bake", {
-      recipe_id: recipeId,
-      batches,
+      items,
       allow_negative: allowNegative,
       note
     });
-    document.getElementById("bake-note-input").value = "";
-    document.getElementById("bake-allow-negative").checked = false;
-    showToast("🎉 Đã trừ kho tự động: " + res.title);
+
+    BAKE_SELECTIONS = {};
+    const noteEl = document.getElementById("bake-note-input");
+    if (noteEl) noteEl.value = "";
+    const negEl = document.getElementById("bake-allow-negative");
+    if (negEl) negEl.checked = false;
+
+    showToast("🎉 Đã làm bánh & trừ kho thành công: " + (res.title || ""));
     await loadState();
   } catch (err) {
     showToast(err.message, true);
@@ -2383,11 +2774,15 @@ function setHistoryViewMode(mode) {
   });
   const whSec = document.getElementById("warehouse-history-section");
   const actSec = document.getElementById("personal-activity-section");
+  const custSec = document.getElementById("customer-database-section");
   if (whSec) {
-    whSec.classList.toggle("hidden", currentHistoryViewMode === "activity");
+    whSec.classList.toggle("hidden", currentHistoryViewMode !== "all" && currentHistoryViewMode !== "warehouse");
   }
   if (actSec) {
-    actSec.classList.toggle("hidden", currentHistoryViewMode === "warehouse");
+    actSec.classList.toggle("hidden", currentHistoryViewMode !== "all" && currentHistoryViewMode !== "activity");
+  }
+  if (custSec) {
+    custSec.classList.toggle("hidden", currentHistoryViewMode !== "all" && currentHistoryViewMode !== "customer");
   }
 }
 
@@ -2940,8 +3335,13 @@ function exportIngredientsCSV() {
 }
 
 function exportOrdersCSV() {
+  const targetOrders = typeof getFilteredOrders === "function" ? getFilteredOrders() : STATE.orders || [];
+  if (targetOrders.length === 0) {
+    return showToast("Không có hóa đơn nào để xuất file.", true);
+  }
+
   const headers = ["Mã Bill", "Ngày giờ", "Khách hàng", "Số điện thoại", "Thanh toán", "Chi tiết bánh", "Tổng thu (VNĐ)", "Giá vốn (VNĐ)", "Lợi nhuận (VNĐ)"];
-  const rows = (STATE.orders || []).map((o) => {
+  const rows = targetOrders.map((o) => {
     const itemsStr = (o.items || []).map((it) => `${it.qty}x ${it.name}`).join("; ");
     const profit = (o.total_amount || 0) - (o.total_cost || 0);
     return [
@@ -2963,7 +3363,176 @@ function exportOrdersCSV() {
   link.href = URL.createObjectURL(blob);
   link.download = `doanh-thu-ban-banh-${new Date().toISOString().slice(0, 10)}.csv`;
   link.click();
-  logClientActivity("SETTINGS", `Xuất file Excel (CSV) báo cáo doanh thu bán bánh (${(STATE.orders || []).length} đơn)`);
+  logClientActivity("SETTINGS", `Xuất file Excel (CSV) báo cáo doanh thu bán bánh (${targetOrders.length} đơn)`);
+}
+
+/* ==================== 7. CUSTOMER DATABASE & SUPPORT SUMMARY ==================== */
+function getCustomerDatabaseList() {
+  const orders = STATE.orders || [];
+  const map = new Map();
+
+  orders.forEach((o) => {
+    const rawName = (o.customer_name || "").trim() || "Khách lẻ";
+    const phone = (o.customer_phone || "").trim();
+    const key = (phone ? `${phone}__` : "") + rawName.toLowerCase();
+
+    if (!map.has(key)) {
+      map.set(key, {
+        name: rawName,
+        phone: phone,
+        order_count: 0,
+        total_spent: 0,
+        total_cakes: 0,
+        cakes_map: {},
+        last_order_at: o.created_at || ""
+      });
+    }
+
+    const c = map.get(key);
+    c.order_count += 1;
+    c.total_spent += Number(o.total_amount) || 0;
+    if (phone && !c.phone) c.phone = phone;
+    if (!c.last_order_at || String(o.created_at) > String(c.last_order_at)) {
+      c.last_order_at = o.created_at;
+    }
+
+    (o.items || []).forEach((it) => {
+      const q = Number(it.qty) || 0;
+      c.total_cakes += q;
+      const cakeName = (it.name || "Món khác").trim();
+      c.cakes_map[cakeName] = (c.cakes_map[cakeName] || 0) + q;
+    });
+  });
+
+  return Array.from(map.values()).sort((a, b) => b.total_spent - a.total_spent);
+}
+
+function renderCustomerDatabase() {
+  const tbody = document.getElementById("customer-database-tbody");
+  if (!tbody) return;
+
+  const q = (document.getElementById("customer-db-search")?.value || "").toLowerCase().trim();
+  const allCustomers = getCustomerDatabaseList();
+
+  // Update total customer count
+  const countEl = document.getElementById("customer-total-count");
+  if (countEl) countEl.textContent = allCustomers.length;
+
+  // KPI cards
+  const kpiCustEl = document.getElementById("cust-kpi-total-cust");
+  const kpiCakesEl = document.getElementById("cust-kpi-total-cakes");
+  const kpiSpentEl = document.getElementById("cust-kpi-total-spent");
+  const kpiTopEl = document.getElementById("cust-kpi-top-cust");
+
+  let grandCakes = 0;
+  let grandSpent = 0;
+  allCustomers.forEach((c) => {
+    grandCakes += c.total_cakes;
+    grandSpent += c.total_spent;
+  });
+
+  if (kpiCustEl) kpiCustEl.textContent = `${allCustomers.length} khách`;
+  if (kpiCakesEl) kpiCakesEl.textContent = `${formatNum(grandCakes)} cái`;
+  if (kpiSpentEl) kpiSpentEl.textContent = formatVND(grandSpent);
+  if (kpiTopEl) {
+    if (allCustomers.length > 0 && allCustomers[0].name) {
+      kpiTopEl.textContent = `${allCustomers[0].name} (${formatVND(allCustomers[0].total_spent)})`;
+    } else {
+      kpiTopEl.textContent = "—";
+    }
+  }
+
+  const filtered = allCustomers.filter((c) => {
+    if (!q) return true;
+    return c.name.toLowerCase().includes(q) || c.phone.toLowerCase().includes(q);
+  });
+
+  if (filtered.length === 0) {
+    tbody.innerHTML = `<tr><td colspan="6" class="text-center muted" style="padding: 28px;">${allCustomers.length === 0 ? "Chưa có dữ liệu khách hàng nào (dữ liệu sẽ tự động tạo khi bạn xuất hóa đơn bán bánh)." : "Không tìm thấy khách hàng phù hợp."}</td></tr>`;
+    return;
+  }
+
+  tbody.innerHTML = filtered
+    .map((c) => {
+      const cakePills = Object.entries(c.cakes_map)
+        .sort((a, b) => b[1] - a[1])
+        .map(([name, qty]) => `<span class="cust-cake-pill">🍰 ${escapeHtml(name)}: <strong>${formatNum(qty)}</strong></span>`)
+        .join(" ");
+
+      const safeName = escapeHtml(c.name).replace(/'/g, "\\'");
+      const safePhone = escapeHtml(c.phone).replace(/'/g, "\\'");
+
+      return `
+      <tr>
+        <td data-label="Khách hàng & SĐT" class="card-cell-header">
+          <strong>👤 ${escapeHtml(c.name)}</strong>
+          ${c.phone ? `<div class="muted" style="font-size:12.5px;">📞 ${escapeHtml(c.phone)}</div>` : ""}
+          <div class="muted" style="font-size:11px; margin-top:2px;">Gần nhất: ${escapeHtml(c.last_order_at || "—")}</div>
+        </td>
+        <td data-label="Số đơn" class="text-center nowrap-cell">
+          <strong>${c.order_count}</strong> đơn
+        </td>
+        <td data-label="Tổng bánh mua" class="text-center nowrap-cell">
+          <span class="badge-total-cakes">${formatNum(c.total_cakes)} cái</span>
+        </td>
+        <td data-label="Bánh đã ủng hộ">
+          <div style="display:flex; flex-wrap:wrap; gap:4px;">${cakePills || "—"}</div>
+        </td>
+        <td data-label="Tổng tiền ủng hộ" class="text-right nowrap-cell">
+          <strong class="text-green">${formatVND(c.total_spent)}</strong>
+        </td>
+        <td data-label="Thao tác" class="text-right card-cell-actions nowrap-cell">
+          <button type="button" class="btn btn-sm btn-primary" onclick="quickOrderForCustomer('${safeName}', '${safePhone}')">
+            🧾 Bán nhanh
+          </button>
+        </td>
+      </tr>
+    `;
+    })
+    .join("");
+}
+
+function quickOrderForCustomer(name, phone) {
+  switchTab("pos");
+  const nameInput = document.getElementById("pos-customer-name");
+  const phoneInput = document.getElementById("pos-customer-phone");
+  if (nameInput) nameInput.value = name || "";
+  if (phoneInput) phoneInput.value = phone || "";
+  showToast(`👉 Đã chọn khách "${name}". Hãy bấm chọn bánh khách mua!`);
+  const posTable = document.querySelector(".pos-menu-card");
+  if (posTable) posTable.scrollIntoView({ behavior: "smooth", block: "start" });
+}
+
+function exportCustomerCSV() {
+  const customers = getCustomerDatabaseList();
+  if (customers.length === 0) {
+    return showToast("Chưa có dữ liệu khách hàng để xuất.", true);
+  }
+
+  const headers = ["Tên khách hàng", "Số điện thoại", "Lần mua gần nhất", "Số đơn đã mua", "Tổng bánh đã mua", "Chi tiết các bánh đã ủng hộ", "Tổng tiền đã ủng hộ (VNĐ)"];
+  const rows = customers.map((c) => {
+    const cakesStr = Object.entries(c.cakes_map)
+      .map(([name, qty]) => `${qty}x ${name}`)
+      .join("; ");
+
+    return [
+      `"${(c.name || "").replace(/"/g, '""')}"`,
+      `"${(c.phone || "").replace(/"/g, '""')}"`,
+      `"${c.last_order_at || ""}"`,
+      c.order_count,
+      c.total_cakes,
+      `"${cakesStr.replace(/"/g, '""')}"`,
+      Math.round(c.total_spent || 0)
+    ];
+  });
+
+  const csvContent = "\uFEFF" + [headers.join(","), ...rows.map((r) => r.join(","))].join("\n");
+  const blob = new Blob([csvContent], { type: "text/csv;charset=utf-8;" });
+  const link = document.createElement("a");
+  link.href = URL.createObjectURL(blob);
+  link.download = `co-so-du-lieu-khach-hang-${new Date().toISOString().slice(0, 10)}.csv`;
+  link.click();
+  logClientActivity("SETTINGS", `Xuất file Excel (CSV) cơ sở dữ liệu khách hàng (${customers.length} khách)`);
 }
 
 function escapeHtml(str) {

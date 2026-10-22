@@ -253,13 +253,62 @@
           </div>
         </div>
 
-        <!-- Order History & Reprint Section -->
+        <!-- Order History & Period Filter Section -->
         <div class="card mt-24">
-          <div class="card-header">
+          <div class="card-header history-card-header">
             <div>
-              <h2>📋 Danh sách Hóa đơn đã bán (Bấm để xem hoặc In lại Bill)</h2>
+              <h2>📋 Danh sách Hóa đơn đã bán (<span id="orders-filtered-count">0</span> hóa đơn)</h2>
+              <p class="muted" style="font-size: 13px; margin-top: 2px;">
+                Xem doanh thu và lọc hóa đơn theo Ngày, Tháng, Năm hoặc tìm kiếm theo mã bill, tên khách, số điện thoại.
+              </p>
             </div>
-            <button class="btn btn-sm btn-outline" onclick="exportOrdersCSV()">📥 Xuất doanh thu ra Excel (CSV)</button>
+            <div class="header-actions">
+              <button class="btn btn-sm btn-outline" onclick="exportOrdersCSV()">📥 Xuất Excel (CSV)</button>
+            </div>
+          </div>
+
+          <!-- Period Filter Bar -->
+          <div class="order-filter-bar">
+            <div class="filter-pills order-period-pills">
+              <button type="button" class="pill active" data-operiod="today" onclick="setOrderPeriod('today')">📅 Hôm nay</button>
+              <button type="button" class="pill" data-operiod="month" onclick="setOrderPeriod('month')">🗓️ Tháng này</button>
+              <button type="button" class="pill" data-operiod="year" onclick="setOrderPeriod('year')">📆 Năm nay</button>
+              <button type="button" class="pill" data-operiod="all" onclick="setOrderPeriod('all')">♾️ Tất cả</button>
+            </div>
+
+            <div class="order-filter-inputs">
+              <div class="filter-input-group">
+                <label>Hoặc chọn ngày:</label>
+                <input type="date" id="order-filter-date" class="form-control" onchange="setOrderCustomDate(this.value)" />
+              </div>
+              <div class="filter-input-group">
+                <label>Hoặc chọn tháng:</label>
+                <input type="month" id="order-filter-month" class="form-control" onchange="setOrderCustomMonth(this.value)" />
+              </div>
+              <div class="filter-input-group filter-search-wrap">
+                <input type="text" id="order-search-input" class="form-control" placeholder="🔍 Tìm mã bill, tên khách, SĐT..." oninput="renderOrdersHistory()" />
+              </div>
+            </div>
+          </div>
+
+          <!-- KPI Revenue Summary for Selected Period -->
+          <div class="order-kpi-bar">
+            <div class="order-kpi-card">
+              <span class="muted">💰 Doanh thu:</span>
+              <strong id="order-kpi-rev" class="text-primary">0 đ</strong>
+            </div>
+            <div class="order-kpi-card">
+              <span class="muted">📈 Lợi nhuận gộp:</span>
+              <strong id="order-kpi-profit" class="text-green">0 đ</strong>
+            </div>
+            <div class="order-kpi-card">
+              <span class="muted">🧾 Số hóa đơn:</span>
+              <strong id="order-kpi-count">0 đơn</strong>
+            </div>
+            <div class="order-kpi-card">
+              <span class="muted">🧁 Bánh đã bán:</span>
+              <strong id="order-kpi-cakes">0 cái</strong>
+            </div>
           </div>
 
           <div class="table-responsive">
@@ -286,48 +335,55 @@
         <div class="page-header">
           <div>
             <h1>🧁 Làm bánh & Tự động trừ nguyên liệu (từ Gram sang Kg kho)</h1>
-            <p class="subtitle">Chọn loại bánh bạn làm, phần mềm sẽ lấy định lượng Gram trong công thức tự động quy đổi và trừ vào số Kg trong kho</p>
+            <p class="subtitle">Chọn các loại bánh làm hôm nay, nhập số lượng, phần mềm tự động cộng gộp nguyên liệu cần trừ và trừ kho chỉ với 1 lần bấm</p>
+          </div>
+          <div class="header-actions">
+            <button type="button" class="btn btn-outline btn-sm" onclick="clearAllBakeSelections()">🔄 Bỏ chọn tất cả</button>
+            <button type="button" class="btn btn-secondary btn-sm" onclick="selectAllBake1Batch()">+1 Tất cả các loại bánh</button>
           </div>
         </div>
 
         <div class="bake-container">
+          <!-- Left: Multi-Cake Picker List -->
           <div class="card bake-form-card">
-            <h2>1. Chọn bánh và số lượng làm</h2>
-            <div class="form-group">
-              <label>Chọn công thức bánh</label>
-              <select id="bake-recipe-select" class="form-control" onchange="renderBakePreview()"></select>
+            <div class="bake-section-header mb-12">
+              <div>
+                <h2>1. Chọn danh sách bánh làm hôm nay</h2>
+                <p class="muted" style="font-size: 12.5px; margin-top: 2px;">
+                  Bấm <strong>+1, +5</strong> hoặc nhập số lượng mẻ/số cái muốn làm cho từng loại bánh
+                </p>
+              </div>
             </div>
 
-            <div class="form-row">
-              <div class="form-group">
-                <label>Số lượng mẻ làm (Hệ số nhân)</label>
-                <div class="qty-stepper">
-                  <button type="button" class="btn-step" onclick="adjustBakeBatches(-0.5)">-0.5</button>
-                  <button type="button" class="btn-step" onclick="adjustBakeBatches(-1)">-1</button>
-                  <input type="number" id="bake-batches-input" class="form-control text-center" value="1" min="0.1" step="0.5" oninput="renderBakePreview()" />
-                  <button type="button" class="btn-step" onclick="adjustBakeBatches(1)">+1</button>
-                  <button type="button" class="btn-step" onclick="adjustBakeBatches(0.5)">+0.5</button>
-                </div>
-                <small id="bake-yield-label" class="field-hint">Thành phẩm: 1 bánh</small>
-              </div>
+            <div class="mb-12">
+              <input type="text" id="bake-search-input" class="form-control" placeholder="🔍 Tìm nhanh tên bánh..." oninput="filterBakeRecipes()" />
+            </div>
 
-              <div class="form-group">
-                <label>Ghi chú mẻ bánh (Tuỳ chọn)</label>
-                <input type="text" id="bake-note-input" class="form-control" placeholder="VD: Nướng mẻ sáng..." />
-              </div>
+            <div id="bake-recipes-list" class="bake-recipes-list">
+              <!-- Rendered dynamically by app.js -->
+            </div>
+          </div>
+
+          <!-- Right: Aggregated Inventory Deduction & Financial Summary -->
+          <div class="card bake-preview-card">
+            <h2>2. Tổng hợp nguyên liệu trừ kho & Chi phí</h2>
+            
+            <!-- Selected cakes summary pill list -->
+            <div id="bake-selected-summary-box" class="bake-selected-box mb-12">
+              <!-- Rendered by app.js -->
             </div>
 
             <div class="bake-cost-summary">
               <div>
-                <span class="muted">Tổng giá vốn nguyên liệu mẻ này:</span>
+                <span class="muted">Tổng số bánh làm:</span>
+                <strong id="bake-total-cakes-count">0 cái (0 loại bánh)</strong>
+              </div>
+              <div>
+                <span class="muted">Tổng giá vốn nguyên liệu:</span>
                 <strong id="bake-total-cost" class="cost-highlight">0 đ</strong>
               </div>
               <div>
-                <span class="muted">Giá vốn 1 bánh:</span>
-                <strong id="bake-unit-cost">0 đ</strong>
-              </div>
-              <div>
-                <span class="muted">Doanh thu dự kiến (theo giá bán 1 bánh):</span>
+                <span class="muted">Doanh thu dự kiến:</span>
                 <strong id="bake-expected-rev">0 đ</strong>
               </div>
               <div>
@@ -336,23 +392,25 @@
               </div>
             </div>
 
+            <div class="form-group mb-12">
+              <label>📝 Ghi chú mẻ bánh (Tuỳ chọn)</label>
+              <input type="text" id="bake-note-input" class="form-control" placeholder="VD: Nướng mẻ sáng, đơn tiệc..." />
+            </div>
+
             <div id="bake-shortage-warning" class="shortage-banner hidden">
               <div class="shortage-title">⚠️ Không đủ nguyên liệu trong kho!</div>
-              <p class="shortage-sub">Một số nguyên liệu trong kho hiện ít hơn định lượng cần dùng.</p>
-              <label class="checkbox-label">
+              <div id="bake-shortage-list" class="shortage-sub"></div>
+              <label class="checkbox-label mt-8">
                 <input type="checkbox" id="bake-allow-negative" />
                 <span>Vẫn cho phép làm bánh (Trừ phần còn lại trong kho về 0)</span>
               </label>
             </div>
 
-            <button class="btn btn-primary btn-lg btn-block" onclick="submitBake()">
-              ✅ Xác nhận Làm Bánh & Trừ Nguyên Liệu
+            <button id="btn-submit-bake" class="btn btn-primary btn-lg btn-block mb-16" onclick="submitBake()" disabled>
+              🧁 Xác nhận Làm Bánh &amp; Trừ Kho
             </button>
-          </div>
 
-          <div class="card bake-preview-card">
-            <h2>2. Chi tiết nguyên liệu sẽ trừ (Quy đổi Gram → Kg)</h2>
-            <p class="muted mb-12">Kiểm tra định lượng gram cần dùng và số lượng trừ tương ứng trong kho:</p>
+            <h3 style="font-size: 14.5px; margin-bottom: 8px;">Chi tiết nguyên liệu sẽ trừ (Quy đổi Gram → Kg):</h3>
             <div id="bake-ingredients-preview"></div>
           </div>
         </div>
@@ -457,9 +515,10 @@
           </div>
           <div class="header-actions">
             <div class="filter-pills">
-              <button class="pill active" data-hview="all" onclick="setHistoryViewMode('all')">📋 Xem cả hai</button>
+              <button class="pill active" data-hview="all" onclick="setHistoryViewMode('all')">📋 Xem tất cả</button>
               <button class="pill" data-hview="warehouse" onclick="setHistoryViewMode('warehouse')">📦 Lịch sử kho</button>
-              <button class="pill" data-hview="activity" onclick="setHistoryViewMode('activity')">👤 Lịch sử thao tác cá nhân</button>
+              <button class="pill" data-hview="activity" onclick="setHistoryViewMode('activity')">👤 Nhật ký thao tác</button>
+              <button class="pill" data-hview="customer" onclick="setHistoryViewMode('customer')">👥 Dữ liệu khách hàng</button>
             </div>
           </div>
         </div>
@@ -491,7 +550,7 @@
         </div>
 
         <!-- SECTION 2: PERSONAL ACTIVITY LOG -->
-        <div id="personal-activity-section" class="card">
+        <div id="personal-activity-section" class="card mb-24">
           <div class="card-header history-card-header">
             <div>
               <h2>👤 Lịch sử thao tác cá nhân khi sử dụng trang web (<span id="act-total-count">0</span>)</h2>
@@ -524,6 +583,58 @@
           </div>
 
           <div id="activity-log-list" class="history-list"></div>
+        </div>
+
+        <!-- SECTION 3: CUSTOMER DATABASE -->
+        <div id="customer-database-section" class="card">
+          <div class="card-header history-card-header">
+            <div>
+              <h2>👥 Cơ sở dữ liệu khách hàng &amp; Thống kê ủng hộ (<span id="customer-total-count">0</span> khách)</h2>
+              <p class="muted" style="font-size: 13px; margin-top: 2px;">
+                Tự động thống kê từ các hóa đơn: số lần mua, tổng số lượng bánh đã mua và chi tiết từng loại bánh khách đã ủng hộ tiệm.
+              </p>
+            </div>
+            <div class="history-bulk-bar">
+              <input type="text" id="customer-db-search" class="form-control" style="width: auto; min-width: 240px;" placeholder="🔍 Tìm tên khách hoặc SĐT..." oninput="renderCustomerDatabase()" />
+              <button class="btn btn-sm btn-outline" onclick="exportCustomerCSV()">📥 Xuất danh sách khách (CSV)</button>
+            </div>
+          </div>
+
+          <!-- Customer KPI stats cards -->
+          <div class="customer-stats-bar">
+            <div class="customer-stat-card">
+              <span class="muted">👥 Tổng số khách:</span>
+              <strong id="cust-kpi-total-cust">0</strong>
+            </div>
+            <div class="customer-stat-card">
+              <span class="muted">🧁 Tổng bánh đã mua:</span>
+              <strong id="cust-kpi-total-cakes">0 cái</strong>
+            </div>
+            <div class="customer-stat-card">
+              <span class="muted">💰 Tổng tiền ủng hộ:</span>
+              <strong id="cust-kpi-total-spent" class="text-green">0 đ</strong>
+            </div>
+            <div class="customer-stat-card">
+              <span class="muted">🏆 Khách ủng hộ nhiều nhất:</span>
+              <strong id="cust-kpi-top-cust">—</strong>
+            </div>
+          </div>
+
+          <div class="table-responsive">
+            <table class="data-table responsive-card-table customer-db-table">
+              <thead>
+                <tr>
+                  <th>Khách hàng &amp; SĐT</th>
+                  <th class="text-center" style="width: 110px; white-space: nowrap;">Số đơn</th>
+                  <th class="text-center" style="width: 130px; white-space: nowrap;">Tổng bánh mua</th>
+                  <th>Các loại bánh đã ủng hộ</th>
+                  <th class="text-right" style="width: 150px; white-space: nowrap;">Tổng tiền ủng hộ</th>
+                  <th class="text-right" style="width: 165px; white-space: nowrap;">Thao tác</th>
+                </tr>
+              </thead>
+              <tbody id="customer-database-tbody"></tbody>
+            </table>
+          </div>
         </div>
       </section>
     </main>

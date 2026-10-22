@@ -684,107 +684,152 @@ class BakeryRequestHandler(http.server.SimpleHTTPRequestHandler):
                 conn.commit()
                 return self.send_json({"ok": True})
 
-            # 6. Bake Cake (Trừ nguyên liệu tự động từ gram sang kg kho)
+            # 6. Bake Cake (Trừ nguyên liệu tự động từ gram sang kg kho) — Hỗ trợ làm nhiều loại bánh cùng lúc
             if path == "/api/bake":
-                recipe_id = int(data.get("recipe_id") or 0)
-                batches = float(data.get("batches") or 1)
                 allow_negative = bool(data.get("allow_negative", False))
                 note = (data.get("note") or "").strip()
 
-                if batches <= 0:
-                    return self.send_json({"error": "Số lượng cần làm phải lớn hơn 0."}, 400)
+                raw_items = data.get("items")
+                if not raw_items:
+                    r_id = data.get("recipe_id")
+                    b_qty = float(data.get("batches") or 0)
+                    if r_id and b_qty > 0:
+                        raw_items = [{"recipe_id": int(r_id), "batches": b_qty}]
+                    else:
+                        return self.send_json({"error": "Vui lòng chọn ít nhất 1 loại bánh để làm."}, 400)
 
-                cur.execute("SELECT * FROM recipes WHERE id = ?", (recipe_id,))
-                recipe = cur.fetchone()
-                if not recipe:
-                    return self.send_json({"error": "Không tìm thấy công thức bánh."}, 404)
+                # Process all recipes and aggregate ingredient requirements
+                bake_plans = []
+                # ing_id -> {"ing_id", "name", "stock_unit", "stock", "cost_per_unit", "needed_stock", "recipe_breakdown": []}
+                ing_needs = {}
 
-                cur.execute("""
-                    SELECT ri.ingredient_id, ri.amount, ri.recipe_unit,
-                           i.name, i.unit as stock_unit, i.stock, i.cost_per_unit
-                    FROM recipe_items ri
-                    JOIN ingredients i ON i.id = ri.ingredient_id
-                    WHERE ri.recipe_id = ?
-                """, (recipe_id,))
-                items = cur.fetchall()
-                if not items:
-                    return self.send_json({"error": "Công thức bánh chưa có nguyên liệu."}, 400)
+                for b_it in raw_items:
+                    rec_id = int(b_it.get("recipe_id") or 0)
+                    batches = float(b_it.get("batches") or 0)
+                    if rec_id <= 0 or batches <= 0:
+                        continue
 
+                    cur.execute("SELECT * FROM recipes WHERE id = ?", (rec_id,))
+                    rec = cur.fetchone()
+                    if not rec:
+                        continue
+
+                    cur.execute("""
+                        SELECT ri.ingredient_id, ri.amount, ri.recipe_unit,
+                               i.name, i.unit as stock_unit, i.stock, i.cost_per_unit
+                        FROM recipe_items ri
+                        JOIN ingredients i ON i.id = ri.ingredient_id
+                        WHERE ri.recipe_id = ?
+                    """, (rec_id,))
+                    rec_ings = cur.fetchall()
+                    if not rec_ings:
+                        continue
+
+                    total_yield = round(batches * rec["yield_qty"], 2)
+                    bake_plans.append({
+                        "recipe": rec,
+                        "batches": batches,
+                        "yield": total_yield,
+                        "ings": rec_ings
+                    })
+
+                    for it in rec_ings:
+                        ing_id = it["ingredient_id"]
+                        r_unit = it["recipe_unit"] or it["stock_unit"]
+                        s_unit = it["stock_unit"]
+                        factor = convert_unit_factor(r_unit, s_unit)
+                        need_rec = round(it["amount"] * batches, 2)
+                        need_stock = round(need_rec * factor, 5)
+
+                        if ing_id not in ing_needs:
+                            ing_needs[ing_id] = {
+                                "ingredient_id": ing_id,
+                                "name": it["name"],
+                                "stock_unit": s_unit,
+                                "stock": it["stock"],
+                                "cost_per_unit": it["cost_per_unit"],
+                                "total_needed_stock": 0.0,
+                                "breakdown": []
+                            }
+                        ing_needs[ing_id]["total_needed_stock"] = round(ing_needs[ing_id]["total_needed_stock"] + need_stock, 5)
+                        ing_needs[ing_id]["breakdown"].append(f"{rec['name']}: -{need_rec:g}{r_unit}")
+
+                if not bake_plans:
+                    return self.send_json({"error": "Vui lòng chọn ít nhất 1 loại bánh có công thức hợp lệ để làm."}, 400)
+
+                # Check shortages across all selected cakes
                 shortages = []
-                for it in items:
-                    r_unit = it["recipe_unit"] or it["stock_unit"]
-                    s_unit = it["stock_unit"]
-                    factor = convert_unit_factor(r_unit, s_unit)
-                    needed_in_recipe_unit = round(it["amount"] * batches, 2)
-                    needed_in_stock_unit = round(needed_in_recipe_unit * factor, 5)
-                    if it["stock"] + 1e-9 < needed_in_stock_unit:
+                for ing_id, info in ing_needs.items():
+                    if info["stock"] + 1e-9 < info["total_needed_stock"]:
                         shortages.append(
-                            f"{it['name']} (Cần {needed_in_recipe_unit:g}{r_unit} = {needed_in_stock_unit:g}{s_unit}, kho chỉ còn {it['stock']:g}{s_unit})"
+                            f"{info['name']} (Tổng cần {info['total_needed_stock']:g} {info['stock_unit']}, kho chỉ còn {info['stock']:g} {info['stock_unit']})"
                         )
 
                 if shortages and not allow_negative:
                     return self.send_json({
-                        "error": "Không đủ nguyên liệu trong kho:\n- " + "\n- ".join(shortages),
+                        "error": "Không đủ nguyên liệu trong kho để làm tất cả các bánh đã chọn:\n- " + "\n- ".join(shortages),
                         "shortages": shortages
                     }, 400)
 
+                # Perform stock deductions
                 tx_details = []
-                total_cost = 0
-                for it in items:
-                    r_unit = it["recipe_unit"] or it["stock_unit"]
-                    s_unit = it["stock_unit"]
-                    factor = convert_unit_factor(r_unit, s_unit)
-                    needed_in_recipe_unit = round(it["amount"] * batches, 2)
-                    needed_in_stock_unit = round(needed_in_recipe_unit * factor, 5)
+                grand_cost = 0.0
 
-                    new_stock = round(max(0.0, it["stock"] - needed_in_stock_unit) if not allow_negative else (it["stock"] - needed_in_stock_unit), 4)
-                    actual_deducted = round(it["stock"] - new_stock, 5)
-                    total_cost += needed_in_stock_unit * it["cost_per_unit"]
+                for ing_id, info in ing_needs.items():
+                    needed_stock = info["total_needed_stock"]
+                    cur_stock = info["stock"]
+                    new_stock = round(max(0.0, cur_stock - needed_stock) if not allow_negative else (cur_stock - needed_stock), 4)
+                    actual_deducted = round(cur_stock - new_stock, 5)
+                    grand_cost += needed_stock * info["cost_per_unit"]
 
                     cur.execute("""
                         UPDATE ingredients SET stock = ?, updated_at = ? WHERE id = ?
-                    """, (new_stock, now, it["ingredient_id"]))
+                    """, (new_stock, now, ing_id))
 
-                    change_str = f"-{needed_in_recipe_unit:g}{r_unit}"
-                    if r_unit.lower() != s_unit.lower():
-                        change_str += f" (-{needed_in_stock_unit:g}{s_unit})"
-
+                    breakdown_str = " | ".join(info["breakdown"])
                     tx_details.append({
-                        "ingredient_id": it["ingredient_id"],
-                        "name": it["name"],
-                        "change": change_str,
+                        "ingredient_id": ing_id,
+                        "name": info["name"],
+                        "change": f"-{needed_stock:g}{info['stock_unit']} ({breakdown_str})",
                         "raw_delta": -actual_deducted,
-                        "unit": "",
+                        "unit": info["stock_unit"],
                         "after_stock": new_stock
                     })
 
-                total_yield = round(batches * recipe["yield_qty"], 2)
-                title = f"Làm bánh: {recipe['name']} ({total_yield:g} {recipe['yield_unit']})"
-                if note:
-                    title += f" - {note}"
+                # Update baked_stock for each recipe
+                baked_titles = []
+                first_rec_id = bake_plans[0]["recipe"]["id"] if len(bake_plans) == 1 else None
+                first_yield = bake_plans[0]["yield"] if len(bake_plans) == 1 else 0.0
 
-                cur.execute("""
-                    UPDATE recipes
-                    SET baked_stock = ROUND(COALESCE(baked_stock, 0) + ?, 2), updated_at = ?
-                    WHERE id = ?
-                """, (total_yield, now, recipe_id))
+                for bp in bake_plans:
+                    rec = bp["recipe"]
+                    cur.execute("""
+                        UPDATE recipes
+                        SET baked_stock = ROUND(COALESCE(baked_stock, 0) + ?, 2), updated_at = ?
+                        WHERE id = ?
+                    """, (bp["yield"], now, rec["id"]))
+                    baked_titles.append(f"{rec['name']} ({bp['yield']:g} {rec['yield_unit']})")
+
+                summary_title = f"Làm {len(bake_plans)} loại bánh: " + ", ".join(baked_titles)
+                if note:
+                    summary_title += f" - {note}"
 
                 cur.execute("""
                     INSERT INTO transactions (type, title, details_json, total_cost, recipe_id, baked_qty, created_at)
                     VALUES (?, ?, ?, ?, ?, ?, ?)
                 """, (
                     "BAKE",
-                    title,
+                    summary_title,
                     json.dumps(tx_details, ensure_ascii=False),
-                    round(total_cost),
-                    recipe_id,
-                    total_yield,
+                    round(grand_cost),
+                    first_rec_id,
+                    first_yield,
                     now
                 ))
-                log_activity(cur, "BAKE", f"{title} — Đã cộng +{total_yield:g} bánh vào quầy bán & trừ nguyên liệu kho", now)
+                log_activity(cur, "BAKE", f"{summary_title} — Đã cộng bánh vào quầy và trừ nguyên liệu kho", now)
 
                 conn.commit()
-                return self.send_json({"ok": True, "title": title})
+                return self.send_json({"ok": True, "title": summary_title})
 
             # 7. Create Sale Order & Print Bill
             if path == "/api/orders/create":
