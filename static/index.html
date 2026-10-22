@@ -2,7 +2,7 @@
 <html lang="vi">
 <head>
   <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
   <title>MỀM BARKERY</title>
   <link rel="icon" type="image/jpeg" href="/logo.jpg" />
   <link rel="apple-touch-icon" href="/logo.jpg" />
@@ -21,30 +21,30 @@
       </div>
 
       <nav class="nav-menu">
-        <button class="nav-item active" data-tab="dashboard" onclick="switchTab('dashboard')">
+        <button type="button" class="nav-item active" data-tab="dashboard" onclick="switchTab('dashboard')">
           <span class="nav-icon">📊</span>
-          <span class="nav-text">Tổng quan</span>
+          <span class="nav-text" data-mobile-label="Tổng quan">Tổng quan</span>
         </button>
-        <button class="nav-item" data-tab="pos" onclick="switchTab('pos')">
+        <button type="button" class="nav-item" data-tab="pos" onclick="switchTab('pos')">
           <span class="nav-icon">🧾</span>
-          <span class="nav-text">Bán bánh & In Bill</span>
+          <span class="nav-text" data-mobile-label="Bán & Bill">Bán bánh & In Bill</span>
         </button>
-        <button class="nav-item" data-tab="bake" onclick="switchTab('bake')">
+        <button type="button" class="nav-item" data-tab="bake" onclick="switchTab('bake')">
           <span class="nav-icon">🧁</span>
-          <span class="nav-text">Làm bánh (Trừ kho)</span>
+          <span class="nav-text" data-mobile-label="Làm bánh">Làm bánh (Trừ kho)</span>
         </button>
-        <button class="nav-item" data-tab="ingredients" onclick="switchTab('ingredients')">
+        <button type="button" class="nav-item" data-tab="ingredients" onclick="switchTab('ingredients')">
           <span class="nav-icon">🥚</span>
-          <span class="nav-text">Kho nguyên liệu</span>
+          <span class="nav-text" data-mobile-label="Kho NL">Kho nguyên liệu</span>
           <span id="nav-low-badge" class="badge-danger hidden">0</span>
         </button>
-        <button class="nav-item" data-tab="recipes" onclick="switchTab('recipes')">
+        <button type="button" class="nav-item" data-tab="recipes" onclick="switchTab('recipes')">
           <span class="nav-icon">📖</span>
-          <span class="nav-text">Công thức & Giá vốn</span>
+          <span class="nav-text" data-mobile-label="Công thức">Công thức & Giá vốn</span>
         </button>
-        <button class="nav-item" data-tab="history" onclick="switchTab('history')">
+        <button type="button" class="nav-item" data-tab="history" onclick="switchTab('history')">
           <span class="nav-icon">🕒</span>
-          <span class="nav-text">Lịch sử & Nhật ký</span>
+          <span class="nav-text" data-mobile-label="Lịch sử">Lịch sử & Nhật ký</span>
         </button>
       </nav>
 
@@ -264,7 +264,7 @@
           </div>
 
           <div class="table-responsive">
-            <table class="data-table">
+            <table class="data-table responsive-card-table orders-history-table">
               <thead>
                 <tr>
                   <th>Mã Bill</th>
@@ -375,14 +375,14 @@
           </div>
 
           <div class="table-responsive">
-            <table class="data-table">
+            <table class="data-table responsive-card-table bake-daily-table">
               <thead>
                 <tr>
                   <th>Tên loại bánh</th>
-                  <th class="text-center" style="width: 240px;">Tổng bánh đã làm hôm nay (Chỉnh thủ công)</th>
-                  <th class="text-center" style="width: 140px;">Đã bán hôm nay</th>
-                  <th class="text-center" style="width: 160px;">Còn lại trong ngày</th>
-                  <th class="text-right" style="width: 150px;">Thao tác nhanh</th>
+                  <th class="text-center" style="width: 150px;">Đã làm hôm nay</th>
+                  <th class="text-center" style="width: 130px;">Đã bán hôm nay</th>
+                  <th class="text-center" style="width: 150px;">Còn lại trong ngày</th>
+                  <th class="text-center" style="width: 260px;">Cộng / Trừ thủ công</th>
                 </tr>
               </thead>
               <tbody id="bake-daily-summary-tbody"></tbody>
@@ -419,7 +419,7 @@
 
         <div class="card table-card">
           <div class="table-responsive">
-            <table class="data-table">
+            <table class="data-table responsive-card-table ingredients-table">
               <thead>
                 <tr>
                   <th>Tên nguyên liệu</th>
