@@ -181,19 +181,19 @@
             <div class="pos-form-grid">
               <div class="form-group">
                 <label>👤 Tên khách hàng</label>
-                <input type="text" id="pos-customer-name" class="form-control" placeholder="Mặc định: Khách lẻ" list="customer-suggestions" oninput="onCustomerNameInput()" />
+                <input type="text" id="pos-customer-name" class="form-control" placeholder="Mặc định: Khách lẻ" list="customer-suggestions" oninput="onCustomerNameInput(); savePosDraft();" />
                 <datalist id="customer-suggestions"></datalist>
               </div>
               <div class="form-group">
                 <label>📞 Số điện thoại</label>
-                <input type="tel" id="pos-customer-phone" class="form-control" placeholder="VD: 0909123456" />
+                <input type="tel" id="pos-customer-phone" class="form-control" placeholder="VD: 0909123456" oninput="savePosDraft()" />
               </div>
             </div>
 
             <div class="pos-form-grid">
               <div class="form-group">
                 <label>💳 Thanh toán</label>
-                <select id="pos-payment-method" class="form-control">
+                <select id="pos-payment-method" class="form-control" onchange="savePosDraft()">
                   <option value="Tiền mặt">💵 Tiền mặt</option>
                   <option value="Chuyển khoản">🏦 Chuyển khoản</option>
                   <option value="Ship COD">🛵 Ship COD</option>
@@ -201,7 +201,7 @@
               </div>
               <div class="form-group">
                 <label>📝 Ghi chú / Địa chỉ giao</label>
-                <input type="text" id="pos-customer-note" class="form-control" placeholder="VD: Giao 16h, chữ Sinh Nhật..." />
+                <input type="text" id="pos-customer-note" class="form-control" placeholder="VD: Giao 16h, chữ Sinh Nhật..." oninput="savePosDraft()" />
               </div>
             </div>
 

@@ -1202,7 +1202,9 @@ function renderPosTab() {
         const unitPrice = r.selling_price > 0 ? Math.round(r.selling_price) : Math.round((r.cost_per_cake || r.total_cost) * 2);
         const unitCost = r.cost_per_cake || r.total_cost || 0;
         const imgUrl = getRecipeImageUrl(r);
-        const imgHtml = imgUrl ? `<img src="${escapeHtml(imgUrl)}" alt="${escapeHtml(r.name)}" class="pos-cake-thumb" />` : "";
+        const imgHtml = imgUrl
+          ? `<img src="${escapeHtml(imgUrl)}" alt="${escapeHtml(r.name)}" class="pos-cake-thumb" />`
+          : `<div class="pos-cake-thumb" style="display:flex; align-items:center; justify-content:center; font-size:22px;">🧁</div>`;
 
         const bakedToday = Number(r.baked_today) || 0;
         const soldToday = Number(r.sold_today) || 0;
@@ -1213,24 +1215,26 @@ function renderPosTab() {
         <div class="pos-item-row" onclick="togglePosRow(event, this)" data-recipe-id="${r.id}" data-name="${escapeHtml(r.name)}" data-unit="${escapeHtml(r.yield_unit)}" data-unit-cost="${unitCost}">
           <div class="pos-cell-main">
             <div class="pos-cake-cell">
-              ${imgHtml}
-              <div class="pos-cake-info">
-                <div class="pos-cake-title-line">
+              <div class="pos-cake-head-left">
+                ${imgHtml}
+                <div class="pos-cake-naming">
                   <strong class="pos-cake-name">${escapeHtml(r.name)}</strong>
                   <span class="pos-unit-price-tag">${formatVND(unitPrice)}</span>
-                  <span class="pos-selected-tag">✓ Đã chọn</span>
                 </div>
+              </div>
+              <div class="pos-cake-head-right">
                 <div class="pos-baked-status">
                   <span class="pos-baked-pill ${pillClass}">🧁 Còn: <strong>${formatNum(remaining)}</strong></span>
                   <span class="pos-baked-pill meta-pill">Làm: <strong>${formatNum(bakedToday)}</strong>${soldToday > 0 ? ` • Bán: <strong>${formatNum(soldToday)}</strong>` : ""}</span>
                 </div>
+                <span class="pos-selected-tag">✓ Đã chọn</span>
               </div>
             </div>
           </div>
           <div class="pos-cell-controls">
             <div class="pos-controls-bar">
               <div class="pos-ctrl-box pos-ctrl-price">
-                <span class="pos-ctrl-label">Đơn giá</span>
+                <span class="pos-ctrl-label">Đơn giá (đ)</span>
                 <input type="number" class="pos-price-input" value="${unitPrice}" min="0" step="1000" oninput="updatePosSummary()" />
               </div>
               <div class="pos-ctrl-box pos-ctrl-qty">
@@ -1253,8 +1257,103 @@ function renderPosTab() {
       .join("");
   }
 
+  // Auto-restore draft order from localStorage if available
+  restorePosDraft();
+
   updatePosSummary();
   renderOrdersHistory();
+}
+
+function savePosDraft() {
+  try {
+    const items = [];
+    document.querySelectorAll("#pos-cakes-tbody .pos-item-row").forEach((row) => {
+      const isSelected = row.classList.contains("selected-row");
+      const recipeId = row.dataset.recipeId ? Number(row.dataset.recipeId) : null;
+      const qty = parseFloat(row.querySelector(".pos-qty-input")?.value) || 0;
+      const price = parseFloat(row.querySelector(".pos-price-input")?.value) || 0;
+      if (recipeId) {
+        if (isSelected || qty !== 1) {
+          items.push({ recipeId, isSelected, price, qty });
+        }
+      } else {
+        const name = row.querySelector(".custom-pos-name")?.value || "";
+        items.push({ isCustom: true, name, price, qty, isSelected });
+      }
+    });
+
+    const draft = {
+      customer_name: document.getElementById("pos-customer-name")?.value || "",
+      customer_phone: document.getElementById("pos-customer-phone")?.value || "",
+      payment_method: document.getElementById("pos-payment-method")?.value || "Tiền mặt",
+      customer_note: document.getElementById("pos-customer-note")?.value || "",
+      discount: document.getElementById("pos-discount")?.value || "0",
+      shipping: document.getElementById("pos-shipping")?.value || "0",
+      items,
+      saved_at: Date.now()
+    };
+
+    localStorage.setItem("MEM_POS_DRAFT_V1", JSON.stringify(draft));
+  } catch (e) {
+    // ignore
+  }
+}
+
+function restorePosDraft() {
+  try {
+    const raw = localStorage.getItem("MEM_POS_DRAFT_V1");
+    if (!raw) return;
+    const draft = JSON.parse(raw);
+    if (!draft) return;
+
+    if (draft.customer_name) {
+      const el = document.getElementById("pos-customer-name");
+      if (el) el.value = draft.customer_name;
+    }
+    if (draft.customer_phone) {
+      const el = document.getElementById("pos-customer-phone");
+      if (el) el.value = draft.customer_phone;
+    }
+    if (draft.payment_method) {
+      const el = document.getElementById("pos-payment-method");
+      if (el) el.value = draft.payment_method;
+    }
+    if (draft.customer_note) {
+      const el = document.getElementById("pos-customer-note");
+      if (el) el.value = draft.customer_note;
+    }
+    if (draft.discount) {
+      const el = document.getElementById("pos-discount");
+      if (el) el.value = draft.discount;
+    }
+    if (draft.shipping) {
+      const el = document.getElementById("pos-shipping");
+      if (el) el.value = draft.shipping;
+    }
+
+    if (Array.isArray(draft.items)) {
+      draft.items.forEach((saved) => {
+        if (saved.recipeId) {
+          const row = document.querySelector(`#pos-cakes-tbody .pos-item-row[data-recipe-id="${saved.recipeId}"]`);
+          if (row) {
+            if (saved.isSelected) row.classList.add("selected-row");
+            if (saved.qty !== undefined) {
+              const qInput = row.querySelector(".pos-qty-input");
+              if (qInput) qInput.value = saved.qty;
+            }
+            if (saved.price !== undefined) {
+              const pInput = row.querySelector(".pos-price-input");
+              if (pInput) pInput.value = saved.price;
+            }
+          }
+        } else if (saved.isCustom) {
+          addCustomPosRowWithData(saved.name, saved.price, saved.qty, saved.isSelected);
+        }
+      });
+    }
+  } catch (e) {
+    console.warn("Could not restore POS draft:", e);
+  }
 }
 
 function jumpToSell(recipeId) {
@@ -1313,45 +1412,61 @@ function onPosQtyInput(input) {
   updatePosSummary();
 }
 
-function addCustomPosRow() {
+function addCustomPosRowWithData(name = "", price = 15000, qty = 1, isSelected = true) {
   const tbody = document.getElementById("pos-cakes-tbody");
+  if (!tbody) return;
   const tr = document.createElement("div");
-  tr.className = "pos-item-row selected-row";
+  tr.className = `pos-item-row ${isSelected ? "selected-row" : ""}`;
   tr.dataset.recipeId = "";
   tr.dataset.unit = "cái";
   tr.dataset.unitCost = "0";
   tr.setAttribute("onclick", "togglePosRow(event, this)");
   tr.innerHTML = `
     <div class="pos-cell-main">
-      <div style="display:flex; align-items:center; gap:8px; flex-wrap:wrap;">
-        <input type="text" class="form-control custom-pos-name" placeholder="Nhập tên món phụ (VD: Nến, Hộp quà...)" oninput="updatePosSummary()" style="padding:6px 10px; font-size:13.5px; flex:1; min-width:140px;" />
-        <span class="pos-unit-price-tag">15.000 đ</span>
-        <span class="pos-selected-tag">✓ Đã chọn</span>
+      <div class="pos-cake-cell">
+        <div class="pos-cake-head-left">
+          <div class="pos-cake-thumb" style="display:flex; align-items:center; justify-content:center; font-size:20px;">🎁</div>
+          <div class="pos-cake-naming">
+            <input type="text" class="form-control custom-pos-name" placeholder="Tên món phụ (Nến, Hộp quà...)" value="${escapeHtml(name)}" oninput="updatePosSummary()" style="padding:4px 8px; font-size:13.5px; width:200px; max-width:100%;" />
+          </div>
+        </div>
+        <div class="pos-cake-head-right">
+          <span class="pos-unit-price-tag">Món thêm</span>
+          <span class="pos-selected-tag">✓ Đã chọn</span>
+        </div>
       </div>
     </div>
     <div class="pos-cell-controls">
       <div class="pos-controls-bar">
         <div class="pos-ctrl-box pos-ctrl-price">
-          <span class="pos-ctrl-label">Đơn giá</span>
-          <input type="number" class="pos-price-input" value="15000" min="0" step="1000" oninput="updatePosSummary()" />
+          <span class="pos-ctrl-label">Đơn giá (đ)</span>
+          <input type="number" class="pos-price-input" value="${price}" min="0" step="1000" oninput="updatePosSummary()" />
         </div>
         <div class="pos-ctrl-box pos-ctrl-qty">
           <span class="pos-ctrl-label">Số lượng</span>
           <div class="pos-qty-box">
             <button type="button" class="pos-qty-btn" onclick="stepPosQty(event, this, -1)">−</button>
-            <input type="number" class="pos-qty-input" value="1" min="1" step="1" oninput="onPosQtyInput(this)" />
+            <input type="number" class="pos-qty-input" value="${qty}" min="1" step="1" oninput="onPosQtyInput(this)" />
             <button type="button" class="pos-qty-btn" onclick="stepPosQty(event, this, 1)">+</button>
           </div>
         </div>
         <div class="pos-ctrl-box pos-ctrl-total">
           <span class="pos-ctrl-label">Thành tiền</span>
-          <strong class="pos-line-total">15.000 đ</strong>
+          <strong class="pos-line-total">${formatVND(price * qty)}</strong>
         </div>
       </div>
     </div>
   `;
   tbody.appendChild(tr);
-  tr.querySelector(".custom-pos-name").focus();
+  return tr;
+}
+
+function addCustomPosRow() {
+  const tr = addCustomPosRowWithData("", 15000, 1, true);
+  if (tr) {
+    const input = tr.querySelector(".custom-pos-name");
+    if (input) input.focus();
+  }
   updatePosSummary();
 }
 
@@ -1381,7 +1496,7 @@ function collectPosItems() {
     const price = parseFloat(row.querySelector(".pos-price-input")?.value) || 0;
     const lineTotalEl = row.querySelector(".pos-line-total");
     const priceTagEl = row.querySelector(".pos-unit-price-tag");
-    if (priceTagEl) priceTagEl.textContent = formatVND(price);
+    if (priceTagEl && !row.querySelector(".custom-pos-name")) priceTagEl.textContent = formatVND(price);
 
     if (isSelected && qty > 0) {
       const lineTotal = Math.round(qty * price);
@@ -1433,16 +1548,21 @@ function updatePosSummary() {
   document.getElementById("pos-adj-val").textContent = (adj >= 0 ? "+" : "") + formatVND(adj);
   document.getElementById("pos-total-val").textContent = formatVND(grandTotal);
   document.getElementById("pos-profit-val").innerHTML = `<span>Vốn NL: <strong>${formatVND(totalCost)}</strong></span> • <span>Lãi gộp: <strong class="text-green">${formatVND(profit)}</strong></span>`;
+
+  // Persist POS state automatically
+  savePosDraft();
 }
 
 function resetPosForm() {
+  localStorage.removeItem("MEM_POS_DRAFT_V1");
   document.querySelectorAll("#pos-cakes-tbody .pos-item-row").forEach((row) => {
     if (!row.dataset.recipeId) {
       row.remove();
       return;
     }
     row.classList.remove("selected-row");
-    row.querySelector(".pos-qty-input").value = 1;
+    const qtyInput = row.querySelector(".pos-qty-input");
+    if (qtyInput) qtyInput.value = 1;
   });
   document.getElementById("pos-customer-name").value = "";
   document.getElementById("pos-customer-phone").value = "";

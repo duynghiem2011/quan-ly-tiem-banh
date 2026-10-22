@@ -432,10 +432,9 @@ button, input, select, textarea {
 
 .pos-item-row {
   display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 12px;
-  padding: 10px 14px;
+  flex-direction: column;
+  gap: 10px;
+  padding: 12px 14px;
   border: 1.5px solid var(--border);
   border-radius: 12px;
   background-color: #ffffff;
@@ -458,50 +457,90 @@ button, input, select, textarea {
 }
 
 .pos-cell-main {
+  width: 100%;
+}
+
+.pos-cake-cell {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  width: 100%;
+  flex-wrap: wrap;
+}
+
+.pos-cake-head-left {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-width: 0;
   flex: 1 1 auto;
+}
+
+.pos-cake-naming {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
   min-width: 0;
 }
 
-.pos-cell-controls {
-  flex: 0 0 auto;
+.pos-cake-head-right {
   display: flex;
   align-items: center;
+  gap: 8px;
+  flex-shrink: 0;
+  flex-wrap: wrap;
+}
+
+.pos-cell-controls {
+  width: 100%;
 }
 
 .pos-controls-bar {
-  display: inline-flex;
+  width: 100%;
+  display: flex;
+  justify-content: space-between;
   align-items: center;
-  gap: 8px;
+  gap: 10px;
   background: #f8fafc;
-  padding: 4px 8px;
+  padding: 7px 14px;
   border-radius: 8px;
   border: 1px solid var(--border);
+  box-sizing: border-box;
 }
 
 .pos-ctrl-box {
   display: flex;
   flex-direction: column;
-  align-items: flex-start;
   gap: 2px;
 }
 
+.pos-ctrl-box.pos-ctrl-price {
+  align-items: flex-start;
+  flex: 0 0 auto;
+}
+
+.pos-ctrl-box.pos-ctrl-qty {
+  align-items: center;
+  flex: 0 0 auto;
+}
+
+.pos-ctrl-box.pos-ctrl-total {
+  align-items: flex-end;
+  flex: 0 0 auto;
+  min-width: 80px;
+  text-align: right;
+}
+
 .pos-ctrl-label {
-  font-size: 10px;
+  font-size: 10.5px;
   font-weight: 700;
   color: var(--text-muted);
   line-height: 1.1;
   white-space: nowrap;
   text-transform: uppercase;
-}
-
-.pos-ctrl-total {
-  align-items: flex-end;
-  min-width: 76px;
-}
-
-.pos-cake-info {
-  min-width: 0;
-  flex: 1;
+  letter-spacing: 0.3px;
 }
 
 .pos-cake-title-line {
@@ -592,13 +631,13 @@ button, input, select, textarea {
 }
 
 .pos-qty-btn {
-  width: 28px;
-  height: 28px;
+  width: 32px;
+  height: 32px;
   border-radius: 7px;
   border: 1px solid var(--border);
   background: var(--surface-alt);
   font-weight: 800;
-  font-size: 15px;
+  font-size: 16px;
   cursor: pointer;
   color: var(--text) !important;
   display: inline-flex;
@@ -616,10 +655,23 @@ button, input, select, textarea {
 }
 
 .pos-qty-input {
-  width: 40px;
-  height: 28px;
+  width: 44px;
+  height: 32px;
   text-align: center;
   padding: 2px 3px;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  font-weight: 700;
+  font-size: 14px;
+  background: #ffffff;
+  color: var(--text);
+}
+
+.pos-price-input {
+  width: 92px;
+  height: 32px;
+  text-align: right;
+  padding: 3px 8px;
   border: 1px solid var(--border);
   border-radius: 6px;
   font-weight: 700;
@@ -628,28 +680,15 @@ button, input, select, textarea {
   color: var(--text);
 }
 
-.pos-price-input {
-  width: 82px;
-  height: 28px;
-  text-align: right;
-  padding: 2px 6px;
-  border: 1px solid var(--border);
-  border-radius: 6px;
-  font-weight: 700;
-  font-size: 13px;
-  background: #ffffff;
-  color: var(--text);
-}
-
 .pos-line-total {
   white-space: nowrap;
   color: var(--text-muted);
-  font-size: 13px;
+  font-size: 14px;
 }
 
 .pos-item-row.selected-row .pos-line-total {
   color: var(--green);
-  font-size: 14px;
+  font-size: 15.5px;
   font-weight: 800;
 }
 
@@ -2332,8 +2371,8 @@ button, input, select, textarea {
   .pos-cell-controls {
     flex: 1 1 100%;
     width: 100%;
-    padding-top: 8px !important;
-    border-top: 1px dashed var(--border) !important;
+    padding-top: 0 !important;
+    border-top: none !important;
   }
   .pos-controls-bar {
     width: 100%;
