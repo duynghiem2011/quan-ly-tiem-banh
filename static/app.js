@@ -897,6 +897,11 @@ async function loadState() {
 }
 
 function switchTab(tabName) {
+  if (tabName) {
+    try {
+      localStorage.setItem("MEM_LAST_ACTIVE_TAB", tabName);
+    } catch (_) {}
+  }
   document.querySelectorAll(".nav-item").forEach((btn) => {
     btn.classList.toggle("active", btn.dataset.tab === tabName);
   });
@@ -1215,26 +1220,24 @@ function renderPosTab() {
         <div class="pos-item-row" onclick="togglePosRow(event, this)" data-recipe-id="${r.id}" data-name="${escapeHtml(r.name)}" data-unit="${escapeHtml(r.yield_unit)}" data-unit-cost="${unitCost}">
           <div class="pos-cell-main">
             <div class="pos-cake-cell">
-              <div class="pos-cake-head-left">
-                ${imgHtml}
-                <div class="pos-cake-naming">
+              ${imgHtml}
+              <div class="pos-cake-info">
+                <div class="pos-cake-title-line">
                   <strong class="pos-cake-name">${escapeHtml(r.name)}</strong>
                   <span class="pos-unit-price-tag">${formatVND(unitPrice)}</span>
+                  <span class="pos-selected-tag">✓ Đã chọn</span>
                 </div>
-              </div>
-              <div class="pos-cake-head-right">
                 <div class="pos-baked-status">
                   <span class="pos-baked-pill ${pillClass}">🧁 Còn: <strong>${formatNum(remaining)}</strong></span>
                   <span class="pos-baked-pill meta-pill">Làm: <strong>${formatNum(bakedToday)}</strong>${soldToday > 0 ? ` • Bán: <strong>${formatNum(soldToday)}</strong>` : ""}</span>
                 </div>
-                <span class="pos-selected-tag">✓ Đã chọn</span>
               </div>
             </div>
           </div>
           <div class="pos-cell-controls">
             <div class="pos-controls-bar">
               <div class="pos-ctrl-box pos-ctrl-price">
-                <span class="pos-ctrl-label">Đơn giá (đ)</span>
+                <span class="pos-ctrl-label">Đơn giá</span>
                 <input type="number" class="pos-price-input" value="${unitPrice}" min="0" step="1000" oninput="updatePosSummary()" />
               </div>
               <div class="pos-ctrl-box pos-ctrl-qty">
@@ -1264,17 +1267,20 @@ function renderPosTab() {
   renderOrdersHistory();
 }
 
+let isPosDraftRestored = false;
+
 function savePosDraft() {
+  if (!isPosDraftRestored) return;
   try {
     const items = [];
     document.querySelectorAll("#pos-cakes-tbody .pos-item-row").forEach((row) => {
       const isSelected = row.classList.contains("selected-row");
-      const recipeId = row.dataset.recipeId ? Number(row.dataset.recipeId) : null;
+      const recipeId = row.getAttribute("data-recipe-id");
       const qty = parseFloat(row.querySelector(".pos-qty-input")?.value) || 0;
       const price = parseFloat(row.querySelector(".pos-price-input")?.value) || 0;
       if (recipeId) {
         if (isSelected || qty !== 1) {
-          items.push({ recipeId, isSelected, price, qty });
+          items.push({ recipeId: String(recipeId), isSelected, price, qty });
         }
       } else {
         const name = row.querySelector(".custom-pos-name")?.value || "";
@@ -1302,31 +1308,37 @@ function savePosDraft() {
 function restorePosDraft() {
   try {
     const raw = localStorage.getItem("MEM_POS_DRAFT_V1");
-    if (!raw) return;
+    if (!raw) {
+      isPosDraftRestored = true;
+      return;
+    }
     const draft = JSON.parse(raw);
-    if (!draft) return;
+    if (!draft) {
+      isPosDraftRestored = true;
+      return;
+    }
 
-    if (draft.customer_name) {
+    if (draft.customer_name !== undefined) {
       const el = document.getElementById("pos-customer-name");
       if (el) el.value = draft.customer_name;
     }
-    if (draft.customer_phone) {
+    if (draft.customer_phone !== undefined) {
       const el = document.getElementById("pos-customer-phone");
       if (el) el.value = draft.customer_phone;
     }
-    if (draft.payment_method) {
+    if (draft.payment_method !== undefined) {
       const el = document.getElementById("pos-payment-method");
       if (el) el.value = draft.payment_method;
     }
-    if (draft.customer_note) {
+    if (draft.customer_note !== undefined) {
       const el = document.getElementById("pos-customer-note");
       if (el) el.value = draft.customer_note;
     }
-    if (draft.discount) {
+    if (draft.discount !== undefined) {
       const el = document.getElementById("pos-discount");
       if (el) el.value = draft.discount;
     }
-    if (draft.shipping) {
+    if (draft.shipping !== undefined) {
       const el = document.getElementById("pos-shipping");
       if (el) el.value = draft.shipping;
     }
@@ -1353,6 +1365,8 @@ function restorePosDraft() {
     }
   } catch (e) {
     console.warn("Could not restore POS draft:", e);
+  } finally {
+    isPosDraftRestored = true;
   }
 }
 
@@ -1424,22 +1438,20 @@ function addCustomPosRowWithData(name = "", price = 15000, qty = 1, isSelected =
   tr.innerHTML = `
     <div class="pos-cell-main">
       <div class="pos-cake-cell">
-        <div class="pos-cake-head-left">
-          <div class="pos-cake-thumb" style="display:flex; align-items:center; justify-content:center; font-size:20px;">🎁</div>
-          <div class="pos-cake-naming">
+        <div class="pos-cake-thumb" style="display:flex; align-items:center; justify-content:center; font-size:20px;">🎁</div>
+        <div class="pos-cake-info">
+          <div class="pos-cake-title-line">
             <input type="text" class="form-control custom-pos-name" placeholder="Tên món phụ (Nến, Hộp quà...)" value="${escapeHtml(name)}" oninput="updatePosSummary()" style="padding:4px 8px; font-size:13.5px; width:200px; max-width:100%;" />
+            <span class="pos-unit-price-tag">Món thêm</span>
+            <span class="pos-selected-tag">✓ Đã chọn</span>
           </div>
-        </div>
-        <div class="pos-cake-head-right">
-          <span class="pos-unit-price-tag">Món thêm</span>
-          <span class="pos-selected-tag">✓ Đã chọn</span>
         </div>
       </div>
     </div>
     <div class="pos-cell-controls">
       <div class="pos-controls-bar">
         <div class="pos-ctrl-box pos-ctrl-price">
-          <span class="pos-ctrl-label">Đơn giá (đ)</span>
+          <span class="pos-ctrl-label">Đơn giá</span>
           <input type="number" class="pos-price-input" value="${price}" min="0" step="1000" oninput="updatePosSummary()" />
         </div>
         <div class="pos-ctrl-box pos-ctrl-qty">
@@ -1554,6 +1566,7 @@ function updatePosSummary() {
 }
 
 function resetPosForm() {
+  isPosDraftRestored = false;
   localStorage.removeItem("MEM_POS_DRAFT_V1");
   document.querySelectorAll("#pos-cakes-tbody .pos-item-row").forEach((row) => {
     if (!row.dataset.recipeId) {
@@ -1570,6 +1583,7 @@ function resetPosForm() {
   document.getElementById("pos-discount").value = 0;
   document.getElementById("pos-shipping").value = 0;
   updatePosSummary();
+  isPosDraftRestored = true;
 }
 
 async function submitPosOrder(shouldPrint = true) {
@@ -3941,7 +3955,22 @@ function escapeHtml(str) {
     .replace(/"/g, "&quot;");
 }
 
-window.addEventListener("DOMContentLoaded", () => {
+window.addEventListener("DOMContentLoaded", async () => {
   updateCloudStatusBadges();
-  loadState();
+  await loadState();
+  try {
+    const lastTab = localStorage.getItem("MEM_LAST_ACTIVE_TAB");
+    if (lastTab && document.getElementById(`tab-${lastTab}`)) {
+      switchTab(lastTab);
+    }
+  } catch (_) {}
+});
+
+// Always persist POS draft when leaving, hiding or switching apps
+window.addEventListener("beforeunload", savePosDraft);
+window.addEventListener("pagehide", savePosDraft);
+document.addEventListener("visibilitychange", () => {
+  if (document.visibilityState === "hidden") {
+    savePosDraft();
+  }
 });
