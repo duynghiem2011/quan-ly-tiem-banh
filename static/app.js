@@ -2003,9 +2003,33 @@ async function saveShopSettings() {
 
 /* ==================== 3. BAKE TAB (MULTI-CAKE AUTO DEDUCTION) ==================== */
 let BAKE_SELECTIONS = {}; // { [recipeId]: batches }
+let isBakeDraftRestored = false;
+
+function saveBakeDraft() {
+  if (!isBakeDraftRestored) return;
+  try {
+    localStorage.setItem("MEM_BAKE_DRAFT_V1", JSON.stringify(BAKE_SELECTIONS));
+  } catch (_) {}
+}
+
+function restoreBakeDraft() {
+  try {
+    const raw = localStorage.getItem("MEM_BAKE_DRAFT_V1");
+    if (raw) {
+      const parsed = JSON.parse(raw);
+      if (parsed && typeof parsed === "object") {
+        BAKE_SELECTIONS = parsed;
+      }
+    }
+  } catch (_) {
+  } finally {
+    isBakeDraftRestored = true;
+  }
+}
 
 function clearAllBakeSelections() {
   BAKE_SELECTIONS = {};
+  saveBakeDraft();
   renderBakeTab();
   showToast("🔄 Đã đặt số lượng làm tất cả các bánh về 0.");
 }
@@ -2014,6 +2038,7 @@ function selectAllBake1Batch() {
   (STATE.recipes || []).forEach((r) => {
     BAKE_SELECTIONS[r.id] = 1;
   });
+  saveBakeDraft();
   renderBakeTab();
   showToast("🧁 Đã chọn làm 1 mẻ cho tất cả các loại bánh.");
 }
@@ -2034,6 +2059,7 @@ function stepBakeQty(recipeId, delta) {
   } else {
     BAKE_SELECTIONS[recipeId] = next;
   }
+  saveBakeDraft();
   renderBakeTab();
 }
 
@@ -2044,17 +2070,20 @@ function setBakeQty(recipeId, val) {
   } else {
     BAKE_SELECTIONS[recipeId] = next;
   }
+  saveBakeDraft();
   renderBakeTab();
 }
 
 function removeBakeSelection(recipeId) {
   delete BAKE_SELECTIONS[recipeId];
+  saveBakeDraft();
   renderBakeTab();
 }
 
 function jumpToBake(recipeId) {
   switchTab("bake");
   BAKE_SELECTIONS = { [Number(recipeId)]: 1 };
+  saveBakeDraft();
   renderBakeTab();
   const searchInput = document.getElementById("bake-search-input");
   if (searchInput) searchInput.value = "";
@@ -2063,6 +2092,9 @@ function jumpToBake(recipeId) {
 }
 
 function renderBakeTab() {
+  if (!isBakeDraftRestored) {
+    restoreBakeDraft();
+  }
   renderBakeDailySummary();
   const listEl = document.getElementById("bake-recipes-list");
   if (!listEl) return;
@@ -2095,46 +2127,46 @@ function renderBakeTab() {
       let subYieldInfo = `1 mẻ = ${yieldQty} ${unit}`;
       if (r.cake_weight_gram > 0) subYieldInfo += ` (${formatNum(r.cake_weight_gram)}g)`;
 
-      let selectedSubText = "";
-      if (isSelected) {
-        selectedSubText = `<div class="bake-selected-subtext">👉 Đang chọn: <strong>${formatNum(batches)} mẻ</strong> (= ${formatNum(totalYield)} ${unit}) • Vốn mẻ: ${formatVND(batches * (r.total_cost || 0))}</div>`;
-      }
-
       return `
       <div class="bake-recipe-row ${isSelected ? "is-selected" : ""}" id="bake-row-${r.id}" data-name="${escapeHtml(r.name.toLowerCase())}">
-        <div class="bake-cake-info">
+        <div class="bake-cake-header">
           <div class="bake-cake-thumb-wrap" onclick="triggerChangeRecipeImage(${r.id})" title="Bấm để tải/đổi ảnh bánh">
             ${imgHtml}
             <span class="thumb-cam-badge">📷 Đổi ảnh</span>
           </div>
           <div class="bake-cake-texts">
             <div class="bake-cake-title">
-              <span class="bake-cake-name-text">${escapeHtml(r.name)}</span>
-              ${isSelected ? `<span class="bake-selected-badge">✓ Làm ${formatNum(batches)} mẻ</span>` : ""}
+              <strong class="bake-cake-name-text">${escapeHtml(r.name)}</strong>
+              ${isSelected ? `<span class="bake-selected-badge">✓ Làm ${formatNum(batches)} mẻ (= ${formatNum(totalYield)} ${unit})</span>` : ""}
             </div>
             <div class="bake-cake-meta-row">
               <span class="bake-meta-pill">📋 ${subYieldInfo}</span>
               <span class="bake-meta-pill">💰 ${formatVND(sellPrice)}</span>
               <span class="bake-meta-pill ${remStock > 0 ? "has-stock" : "no-stock"}">📦 Còn: <strong>${formatNum(remStock)}</strong> ${unit}</span>
             </div>
-            ${selectedSubText}
           </div>
         </div>
 
-        <div class="bake-stepper-compact">
-          <button type="button" class="bake-btn-step bake-minus" onclick="stepBakeQty(${r.id}, -1)" title="Giảm 1 mẻ">−</button>
-          <input
-            type="number"
-            class="bake-compact-input"
-            min="0"
-            step="0.5"
-            value="${batches > 0 ? batches : 0}"
-            onchange="setBakeQty(${r.id}, this.value)"
-            title="Nhập số mẻ làm"
-          />
-          <button type="button" class="bake-btn-step bake-plus" onclick="stepBakeQty(${r.id}, 1)" title="Tăng 1 mẻ">+</button>
-          <button type="button" class="bake-btn-quick" onclick="stepBakeQty(${r.id}, 5)" title="Tăng 5 mẻ">+5</button>
-          ${batches > 0 ? `<button type="button" class="bake-btn-reset" onclick="setBakeQty(${r.id}, 0)" title="Xoá chọn">✕</button>` : ""}
+        <div class="bake-controls-bar">
+          <div class="bake-ctrl-left">
+            <span class="bake-ctrl-label">Số mẻ làm:</span>
+            ${isSelected ? `<span class="bake-ctrl-cost">Vốn NL: <strong>${formatVND(batches * (r.total_cost || 0))}</strong></span>` : `<span class="bake-ctrl-hint">Chưa chọn</span>`}
+          </div>
+          <div class="bake-stepper-compact">
+            <button type="button" class="bake-btn-step bake-minus" onclick="stepBakeQty(${r.id}, -1)" title="Giảm 1 mẻ">−</button>
+            <input
+              type="number"
+              class="bake-compact-input"
+              min="0"
+              step="0.5"
+              value="${batches > 0 ? batches : 0}"
+              onchange="setBakeQty(${r.id}, this.value)"
+              title="Nhập số mẻ làm"
+            />
+            <button type="button" class="bake-btn-step bake-plus" onclick="stepBakeQty(${r.id}, 1)" title="Tăng 1 mẻ">+</button>
+            <button type="button" class="bake-btn-quick" onclick="stepBakeQty(${r.id}, 5)" title="Tăng 5 mẻ">+5</button>
+            ${batches > 0 ? `<button type="button" class="bake-btn-reset" onclick="setBakeQty(${r.id}, 0)" title="Xoá chọn">✕</button>` : ""}
+          </div>
         </div>
       </div>
     `;
@@ -2477,6 +2509,7 @@ async function submitBake() {
     });
 
     BAKE_SELECTIONS = {};
+    saveBakeDraft();
     const noteEl = document.getElementById("bake-note-input");
     if (noteEl) noteEl.value = "";
     const negEl = document.getElementById("bake-allow-negative");
@@ -3966,11 +3999,15 @@ window.addEventListener("DOMContentLoaded", async () => {
   } catch (_) {}
 });
 
-// Always persist POS draft when leaving, hiding or switching apps
-window.addEventListener("beforeunload", savePosDraft);
-window.addEventListener("pagehide", savePosDraft);
+// Always persist POS & Bake draft when leaving, hiding or switching apps
+function saveAllDrafts() {
+  savePosDraft();
+  saveBakeDraft();
+}
+window.addEventListener("beforeunload", saveAllDrafts);
+window.addEventListener("pagehide", saveAllDrafts);
 document.addEventListener("visibilitychange", () => {
   if (document.visibilityState === "hidden") {
-    savePosDraft();
+    saveAllDrafts();
   }
 });
